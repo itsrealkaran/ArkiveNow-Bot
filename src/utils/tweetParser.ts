@@ -1,4 +1,4 @@
-import { TwitterMention, TwitterTweet } from '../types';
+import { TwitterMention } from '../types';
 import logger from './logger';
 
 export interface ParsedMention {

@@ -1,4 +1,3 @@
-import { config } from '../config';
 import databaseService from '../services/database';
 import logger from '../utils/logger';
 

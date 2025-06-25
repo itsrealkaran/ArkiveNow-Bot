@@ -1,5 +1,3 @@
-'use server'
-
 import { ArweaveSigner, TurboFactory } from '@ardrive/turbo-sdk';
 import { createReadStream } from 'fs';
 import { writeFile, unlink } from 'fs/promises';

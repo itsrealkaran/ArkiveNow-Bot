@@ -1,4 +1,4 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import { databaseConfig } from '../config';
 import logger from '../utils/logger';
 import { User, UsageLog, UserQuota } from '../types';

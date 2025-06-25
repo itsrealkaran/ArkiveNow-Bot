@@ -1,4 +1,4 @@
-import { config, botConfig } from './config';
+import { botConfig } from './config';
 import logger from './utils/logger';
 import databaseService from './services/database';
 import twitterService from './services/twitter';
