@@ -35,6 +35,15 @@ class TwitterService {
 
   async getMentions(): Promise<TwitterMention[]> {
     try {
+      // First, get the bot's user ID
+      const botUser = await this.client.v2.userByUsername(botConfig.username);
+      if (!botUser.data) {
+        logger.error('Could not find bot user', { username: botConfig.username });
+        return [];
+      }
+
+      const botUserId = botUser.data.id;
+
       const params: any = {
         max_results: 10,
         'tweet.fields': ['created_at', 'author_id', 'in_reply_to_user_id', 'referenced_tweets'],
@@ -47,7 +56,7 @@ class TwitterService {
         params.since_id = this.lastMentionId;
       }
 
-      const mentions = await this.client.v2.userMentionTimeline(botConfig.username, params);
+      const mentions = await this.client.v2.userMentionTimeline(botUserId, params);
 
       if (mentions.data && Array.isArray(mentions.data) && mentions.data.length > 0) {
         // Update last mention ID for next poll
