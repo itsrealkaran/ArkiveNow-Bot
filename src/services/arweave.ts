@@ -1,5 +1,5 @@
 import { uploadFileTurbo, createArweaveFileData } from '../utils/turbo';
-import { ArweaveUploadResult, ArweaveFileData, ScreenshotResult } from '../types';
+import { ArweaveUploadResult, ScreenshotResult } from '../types';
 import logger from '../utils/logger';
 
 class ArweaveService {
@@ -232,4 +232,4 @@ Tweet ID: ${tweetId}`;
 
 // Export singleton instance
 export const arweaveService = new ArweaveService();
-export default arweaveService; 
+export default arweaveService;
