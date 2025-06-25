@@ -2,60 +2,95 @@
 
 import { ArweaveSigner, TurboFactory } from '@ardrive/turbo-sdk';
 import { createReadStream } from 'fs';
-import { writeFile } from 'fs/promises';
+import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { arweaveConfig } from '../config';
+import { ArweaveUploadResult, ArweaveFileData } from '../types';
+import logger from './logger';
 
-if (!process.env.ARWEAVE_JWK) {
-  throw new Error('ARWEAVE_JWK environment variable is not set');
-}
-
-// @ts-expect-error - JWK type from environment variable needs to be parsed without type checking
-let jwk;
+// Parse JWK from environment
+let jwk: any;
 try {
-  jwk = JSON.parse(process.env.ARWEAVE_JWK);
+  jwk = JSON.parse(arweaveConfig.jwk);
 } catch (error) {
-  console.log(error);
+  logger.error('Failed to parse ARWEAVE_JWK environment variable', { error });
   throw new Error('Failed to parse ARWEAVE_JWK environment variable');
 }
 
-export async function uploadFileTurbo(formData: FormData) {
+export async function uploadFileTurbo(fileData: ArweaveFileData): Promise<ArweaveUploadResult> {
+  let tempPath: string | null = null;
+  
   try {
-    const file = formData.get('file') as File;
-    const title = formData.get('title') as string;
-    const description = formData.get('description') as string;
-
-    if (!file) {
-      throw new Error('No file provided');
-    }
-
-    // Write file to temp directory
-    const tempPath = join(tmpdir(), file.name);
-    const arrayBuffer = await file.arrayBuffer();
-    await writeFile(tempPath, Buffer.from(arrayBuffer));
+    // Write buffer to temp file
+    tempPath = join(tmpdir(), fileData.filename);
+    await writeFile(tempPath, fileData.buffer);
 
     const turbo = TurboFactory.authenticated({ 
-      // @ts-expect-error - ArweaveSigner expects a specific JWK type that we can't guarantee from env var
       signer: new ArweaveSigner(jwk)
     });
 
     const res = await turbo.uploadFile({
-      fileStreamFactory: () => createReadStream(tempPath),
-      fileSizeFactory: () => file.size,
+      fileStreamFactory: () => createReadStream(tempPath!),
+      fileSizeFactory: () => fileData.buffer.length,
       dataItemOpts: {
         tags: [
-          { name: "App-Name", value: "Mekahuman" },
+          { name: "App-Name", value: "Twitter-Screenshot-Bot" },
           { name: "Implements", value: "ANS-110" },
-          { name: "Content-Type", value: file.type ?? "video/mp4" },
-          { name: "Title", value: title ?? "unknown" },
-          { name: "Description", value: description ?? "Test upload" },
+          { name: "Content-Type", value: fileData.contentType },
+          { name: "Title", value: fileData.title || "Tweet Screenshot" },
+          { name: "Description", value: fileData.description || "Screenshot of a tweet" },
         ],
       }
     });
 
+    logger.info('File uploaded to Arweave successfully', { 
+      id: res.id, 
+      filename: fileData.filename,
+      size: fileData.buffer.length 
+    });
+
     return { success: true, id: res.id };
   } catch (error) {
-    console.error('Upload error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Upload failed' };
+    const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+    logger.error('Arweave upload failed', { 
+      error: errorMessage, 
+      filename: fileData.filename 
+    });
+    return { success: false, error: errorMessage };
+  } finally {
+    // Clean up temp file
+    if (tempPath) {
+      try {
+        await unlink(tempPath);
+      } catch (cleanupError) {
+        logger.warn('Failed to cleanup temp file', { tempPath, error: cleanupError });
+      }
+    }
   }
+}
+
+// Helper function to create file data from buffer
+export function createArweaveFileData(
+  buffer: Buffer, 
+  filename: string, 
+  contentType: string = 'image/png',
+  title?: string,
+  description?: string
+): ArweaveFileData {
+  const fileData: ArweaveFileData = {
+    buffer,
+    filename,
+    contentType,
+  };
+  
+  if (title !== undefined) {
+    fileData.title = title;
+  }
+  
+  if (description !== undefined) {
+    fileData.description = description;
+  }
+  
+  return fileData;
 } 
