@@ -1,5 +1,6 @@
 import { config, botConfig } from './config';
 import logger from './utils/logger';
+import databaseService from './services/database';
 
 // Main entry point for the Twitter Screenshot Bot
 async function main() {
@@ -11,7 +12,13 @@ async function main() {
       maxMonthlyRequests: botConfig.maxMonthlyRequests,
     });
 
-    // TODO: Initialize services
+    // Initialize database
+    logger.info('📊 Initializing database...');
+    await databaseService.connect();
+    await databaseService.initializeTables();
+    logger.info('✅ Database initialized successfully');
+
+    // TODO: Initialize Twitter service
     // TODO: Start Twitter polling
     // TODO: Handle mentions and process screenshots
 
@@ -23,13 +30,25 @@ async function main() {
 }
 
 // Handle graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('🛑 Received SIGINT, shutting down gracefully...');
+  try {
+    await databaseService.close();
+    logger.info('✅ Graceful shutdown completed');
+  } catch (error) {
+    logger.error('❌ Error during shutdown', { error });
+  }
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('🛑 Received SIGTERM, shutting down gracefully...');
+  try {
+    await databaseService.close();
+    logger.info('✅ Graceful shutdown completed');
+  } catch (error) {
+    logger.error('❌ Error during shutdown', { error });
+  }
   process.exit(0);
 });
 
