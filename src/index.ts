@@ -1,6 +1,7 @@
 import { config, botConfig } from './config';
 import logger from './utils/logger';
 import databaseService from './services/database';
+import twitterService from './services/twitter';
 
 // Main entry point for the Twitter Screenshot Bot
 async function main() {
@@ -18,7 +19,15 @@ async function main() {
     await databaseService.initializeTables();
     logger.info('✅ Database initialized successfully');
 
-    // TODO: Initialize Twitter service
+    // Initialize Twitter service
+    logger.info('🐦 Initializing Twitter service...');
+    const credentialsValid = await twitterService.verifyCredentials();
+    if (!credentialsValid) {
+      throw new Error('Twitter credentials are invalid');
+    }
+    logger.info('✅ Twitter service initialized successfully');
+
+    // TODO: Initialize screenshot service
     // TODO: Start Twitter polling
     // TODO: Handle mentions and process screenshots
 
@@ -33,6 +42,7 @@ async function main() {
 process.on('SIGINT', async () => {
   logger.info('🛑 Received SIGINT, shutting down gracefully...');
   try {
+    await twitterService.stopPolling();
     await databaseService.close();
     logger.info('✅ Graceful shutdown completed');
   } catch (error) {
@@ -44,6 +54,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   logger.info('🛑 Received SIGTERM, shutting down gracefully...');
   try {
+    await twitterService.stopPolling();
     await databaseService.close();
     logger.info('✅ Graceful shutdown completed');
   } catch (error) {
