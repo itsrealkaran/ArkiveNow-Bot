@@ -1,7 +1,8 @@
-import { botConfig } from './config';
+import { config, botConfig } from './config';
 import logger from './utils/logger';
 import databaseService from './services/database';
 import twitterService from './services/twitter';
+import screenshotService from './services/screenshot';
 
 // Main entry point for the Twitter Screenshot Bot
 async function main() {
@@ -27,7 +28,11 @@ async function main() {
     }
     logger.info('✅ Twitter service initialized successfully');
 
-    // TODO: Initialize screenshot service
+    // Initialize screenshot service
+    logger.info('📸 Initializing screenshot service...');
+    await screenshotService.initialize();
+    logger.info('✅ Screenshot service initialized successfully');
+
     // TODO: Start Twitter polling
     // TODO: Handle mentions and process screenshots
 
@@ -43,6 +48,7 @@ process.on('SIGINT', async () => {
   logger.info('🛑 Received SIGINT, shutting down gracefully...');
   try {
     await twitterService.stopPolling();
+    await screenshotService.cleanup();
     await databaseService.close();
     logger.info('✅ Graceful shutdown completed');
   } catch (error) {
@@ -55,6 +61,7 @@ process.on('SIGTERM', async () => {
   logger.info('🛑 Received SIGTERM, shutting down gracefully...');
   try {
     await twitterService.stopPolling();
+    await screenshotService.cleanup();
     await databaseService.close();
     logger.info('✅ Graceful shutdown completed');
   } catch (error) {
