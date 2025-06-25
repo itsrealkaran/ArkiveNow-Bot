@@ -1,0 +1,289 @@
+import { TwitterMention, TwitterTweet, TwitterUser, BotResponse, QuotaCheck } from '../types';
+import { TweetParser, ParsedMention } from '../utils/tweetParser';
+import twitterService from './twitter';
+import screenshotService from './screenshot';
+import arweaveService from './arweave';
+import quotaService from './quota';
+import databaseService from './database';
+import logger from '../utils/logger';
+
+class BotService {
+  private isProcessing = false;
+
+  constructor() {
+    logger.info('Bot service initialized');
+  }
+
+  /**
+   * Start the bot and begin polling for mentions
+   */
+  async start(): Promise<void> {
+    logger.info('🚀 Starting bot service...');
+
+    // Start polling for mentions
+    await twitterService.startPolling(async (mention) => {
+      await this.processMention(mention);
+    });
+
+    logger.info('✅ Bot service started successfully');
+  }
+
+  /**
+   * Process a single mention
+   */
+  async processMention(mention: TwitterMention): Promise<void> {
+    if (this.isProcessing) {
+      logger.info('Bot is already processing a mention, skipping', { mentionId: mention.id });
+      return;
+    }
+
+    this.isProcessing = true;
+
+    try {
+      logger.info('Processing mention', { 
+        mentionId: mention.id, 
+        authorId: mention.author_id,
+        text: mention.text.substring(0, 50) + '...' 
+      });
+
+      // Step 1: Parse the mention
+      const parsed = TweetParser.parseMention(mention);
+      if (!parsed.tweetId) {
+        await this.handleInvalidRequest(mention, parsed);
+        return;
+      }
+
+      // Step 2: Check if it's a valid screenshot request
+      if (!TweetParser.isValidScreenshotRequest(mention)) {
+        await this.handleInvalidRequest(mention, parsed);
+        return;
+      }
+
+      // Step 3: Get the user who made the request
+      const requester = await twitterService.getUser(mention.author_id);
+      if (!requester) {
+        logger.error('Could not get requester user', { authorId: mention.author_id });
+        await this.handleError(mention, 'Could not identify the user making the request');
+        return;
+      }
+
+      // Step 4: Check user quota
+      const quotaCheck = await quotaService.checkUserQuota(requester.username);
+      if (!quotaCheck.allowed) {
+        await this.handleQuotaExceeded(mention, requester.username, quotaCheck);
+        return;
+      }
+
+      // Step 5: Get the target tweet
+      const tweet = await twitterService.getTweet(parsed.tweetId);
+      if (!tweet) {
+        await this.handleError(mention, 'Could not find the specified tweet');
+        return;
+      }
+
+      // Step 6: Check if tweet is public
+      const isPublic = await twitterService.isPublicTweet(tweet);
+      if (!isPublic) {
+        await this.handleError(mention, 'Cannot screenshot private tweets');
+        return;
+      }
+
+      // Step 7: Get tweet author
+      const author = await twitterService.getUser(tweet.author_id);
+      if (!author) {
+        await this.handleError(mention, 'Could not get tweet author information');
+        return;
+      }
+
+      // Step 8: Take screenshot
+      const screenshotResult = await screenshotService.takeScreenshot(tweet, author, {
+        width: 600,
+        height: 400,
+        quality: 80,
+        format: 'jpeg',
+      });
+
+      if (!screenshotResult.success || !screenshotResult.buffer) {
+        await this.handleError(mention, `Screenshot failed: ${screenshotResult.error}`);
+        return;
+      }
+
+      // Step 9: Upload to Arweave
+      const uploadResult = await arweaveService.uploadScreenshot(
+        screenshotResult,
+        tweet.id,
+        author.username,
+        tweet.text
+      );
+
+      if (!uploadResult.success || !uploadResult.id) {
+        await this.handleError(mention, `Upload failed: ${uploadResult.error}`);
+        return;
+      }
+
+      // Step 10: Increment user quota
+      await quotaService.incrementUserQuota(requester.username);
+
+      // Step 11: Log successful usage
+      await databaseService.logUsage({
+        user_id: requester.id,
+        tweet_id: tweet.id,
+        event_type: 'success',
+        arweave_id: uploadResult.id,
+      });
+
+      // Step 12: Reply with success message
+      await this.handleSuccess(mention, uploadResult.id, tweet.id, author.username);
+
+      logger.info('Successfully processed mention', {
+        mentionId: mention.id,
+        tweetId: tweet.id,
+        arweaveId: uploadResult.id,
+        requester: requester.username,
+      });
+
+    } catch (error) {
+      logger.error('Error processing mention', { mentionId: mention.id, error });
+      await this.handleError(mention, 'An unexpected error occurred while processing your request');
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  /**
+   * Handle successful screenshot and upload
+   */
+  private async handleSuccess(
+    mention: TwitterMention,
+    arweaveId: string,
+    tweetId: string,
+    authorUsername: string
+  ): Promise<void> {
+    try {
+      const message = arweaveService.generateUploadMessage(arweaveId, tweetId, authorUsername);
+      
+      // Reply with the message
+      const replySuccess = await twitterService.replyToTweet(mention.id, message);
+      
+      if (replySuccess) {
+        logger.info('Success reply sent', { 
+          mentionId: mention.id, 
+          arweaveId,
+          messageLength: message.length 
+        });
+      } else {
+        logger.error('Failed to send success reply', { mentionId: mention.id });
+      }
+    } catch (error) {
+      logger.error('Error sending success reply', { mentionId: mention.id, error });
+    }
+  }
+
+  /**
+   * Handle quota exceeded
+   */
+  private async handleQuotaExceeded(
+    mention: TwitterMention,
+    username: string,
+    quotaCheck: QuotaCheck
+  ): Promise<void> {
+    try {
+      // Log quota exceeded event
+      await quotaService.logQuotaExceeded(username, mention.id, quotaCheck.reason || 'Quota exceeded');
+
+      const message = `❌ Sorry @${username}, you've reached your limit for today.
+
+Daily remaining: ${quotaCheck.daily_remaining}
+Monthly remaining: ${quotaCheck.monthly_remaining}
+
+Please try again tomorrow!`;
+
+      const replySuccess = await twitterService.replyToTweet(mention.id, message);
+      
+      if (replySuccess) {
+        logger.info('Quota exceeded reply sent', { mentionId: mention.id, username });
+      } else {
+        logger.error('Failed to send quota exceeded reply', { mentionId: mention.id });
+      }
+    } catch (error) {
+      logger.error('Error sending quota exceeded reply', { mentionId: mention.id, error });
+    }
+  }
+
+  /**
+   * Handle invalid requests
+   */
+  private async handleInvalidRequest(mention: TwitterMention, parsed: ParsedMention): Promise<void> {
+    try {
+      const message = TweetParser.getErrorMessage(parsed);
+      
+      const replySuccess = await twitterService.replyToTweet(mention.id, message);
+      
+      if (replySuccess) {
+        logger.info('Invalid request reply sent', { 
+          mentionId: mention.id, 
+          type: parsed.type 
+        });
+      } else {
+        logger.error('Failed to send invalid request reply', { mentionId: mention.id });
+      }
+    } catch (error) {
+      logger.error('Error sending invalid request reply', { mentionId: mention.id, error });
+    }
+  }
+
+  /**
+   * Handle errors
+   */
+  private async handleError(mention: TwitterMention, errorMessage: string): Promise<void> {
+    try {
+      const message = arweaveService.generateErrorMessage(errorMessage, mention.id);
+      
+      const replySuccess = await twitterService.replyToTweet(mention.id, message);
+      
+      if (replySuccess) {
+        logger.info('Error reply sent', { 
+          mentionId: mention.id, 
+          error: errorMessage 
+        });
+      } else {
+        logger.error('Failed to send error reply', { mentionId: mention.id });
+      }
+    } catch (error) {
+      logger.error('Error sending error reply', { mentionId: mention.id, error });
+    }
+  }
+
+  /**
+   * Stop the bot
+   */
+  async stop(): Promise<void> {
+    logger.info('🛑 Stopping bot service...');
+    
+    try {
+      await twitterService.stopPolling();
+      await screenshotService.cleanup();
+      logger.info('✅ Bot service stopped successfully');
+    } catch (error) {
+      logger.error('Error stopping bot service', { error });
+    }
+  }
+
+  /**
+   * Get bot status
+   */
+  getStatus(): {
+    isRunning: boolean;
+    isProcessing: boolean;
+    lastActivity?: Date;
+  } {
+    return {
+      isRunning: true, // This would be more sophisticated in production
+      isProcessing: this.isProcessing,
+    };
+  }
+}
+
+// Export singleton instance
+export const botService = new BotService();
+export default botService; 
