@@ -10,6 +10,8 @@
     "migrate": "ts-node src/scripts/migrate.ts",
     "test-twitter": "ts-node src/scripts/test-twitter.ts",
     "test-screenshot": "ts-node src/scripts/test-screenshot.ts",
+    "test-arweave": "ts-node src/scripts/test-arweave.ts",
+    "test-integration": "ts-node src/scripts/test-integration.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
