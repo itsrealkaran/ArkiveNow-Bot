@@ -131,137 +131,70 @@ class ScreenshotService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Tweet Screenshot</title>
         <style>
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-          }
-          
           body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: #ffffff;
-            color: #0f1419;
-            line-height: 1.4;
-            padding: 20px;
-          }
-          
-          .tweet-container {
-            max-width: 600px;
-            border: 1px solid #e1e8ed;
-            border-radius: 12px;
-            padding: 16px;
-            background: #ffffff;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          }
-          
-          .tweet-header {
+            background: #f4f6fb;
+            min-height: 100vh;
             display: flex;
             align-items: center;
-            margin-bottom: 12px;
+            justify-content: center;
           }
-          
-          .profile-image {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            margin-right: 12px;
-            object-fit: cover;
+          .tweet-card {
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.07), 0 1.5px 4px rgba(0,0,0,0.03);
+            max-width: 520px;
+            width: 100%;
+            padding: 32px 28px 24px 28px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
           }
-          
-          .user-info {
-            flex: 1;
-          }
-          
-          .display-name {
+          .tweet-author {
             font-weight: 700;
-            font-size: 15px;
-            color: #0f1419;
-            margin-bottom: 2px;
+            font-size: 1.1rem;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+            letter-spacing: 0.01em;
           }
-          
-          .username {
-            font-size: 14px;
-            color: #536471;
+          .tweet-text {
+            font-size: 1.35rem;
+            color: #222;
+            margin-bottom: 18px;
+            line-height: 1.6;
+            word-break: break-word;
           }
-          
-          .tweet-content {
-            font-size: 15px;
-            line-height: 1.5;
-            margin-bottom: 12px;
-            word-wrap: break-word;
-          }
-          
-          .tweet-meta {
-            display: flex;
-            align-items: center;
-            color: #536471;
-            font-size: 14px;
-          }
-          
           .tweet-date {
-            margin-right: 12px;
+            color: #8a99a8;
+            font-size: 0.98rem;
+            margin-bottom: 8px;
           }
-          
           .tweet-id {
-            font-family: monospace;
-            font-size: 12px;
-            opacity: 0.7;
+            color: #c0c7d1;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
           }
-          
-          .metrics {
-            display: flex;
-            gap: 16px;
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px solid #e1e8ed;
-            font-size: 13px;
-            color: #536471;
-          }
-          
-          .metric {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-          }
-          
-          .metric-value {
-            font-weight: 500;
-            color: #0f1419;
+          .badge {
+            position: absolute;
+            bottom: 12px;
+            right: 18px;
+            background: #e6f0fa;
+            color: #1a7fd7;
+            font-size: 0.92rem;
+            padding: 3px 12px;
+            border-radius: 12px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            box-shadow: 0 1px 3px rgba(26,127,215,0.07);
           }
         </style>
       </head>
       <body>
-        <div class="tweet-container">
-          <div class="tweet-header">
-            <div class="user-info">
-              <div class="display-name">${this.escapeHtml(displayName)}</div>
-            </div>
-          </div>
-          <div class="tweet-content">${tweetText}</div>
-          <div class="tweet-meta">
-            <span class="tweet-date">${tweetDate}</span>
-            <span class="tweet-id">ID: ${tweet.id}</span>
-          </div>
-          ${tweet.public_metrics ? `
-            <div class="metrics">
-              <div class="metric">
-                <span class="metric-value">${tweet.public_metrics.retweet_count}</span>
-                <span>Retweets</span>
-              </div>
-              <div class="metric">
-                <span class="metric-value">${tweet.public_metrics.reply_count}</span>
-                <span>Replies</span>
-              </div>
-              <div class="metric">
-                <span class="metric-value">${tweet.public_metrics.like_count}</span>
-                <span>Likes</span>
-              </div>
-              <div class="metric">
-                <span class="metric-value">${tweet.public_metrics.quote_count}</span>
-                <span>Quotes</span>
-              </div>
-            </div>
-          ` : ''}
+        <div class="tweet-card">
+          <div class="tweet-author">${this.escapeHtml(displayName)}</div>
+          <div class="tweet-text">${tweetText}</div>
+          <div class="tweet-date">${tweetDate}</div>
+          <div class="tweet-id">ID: ${tweet.id}</div>
+          <div class="badge">PermaSnap</div>
         </div>
       </body>
       </html>

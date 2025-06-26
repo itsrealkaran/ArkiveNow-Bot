@@ -34,7 +34,7 @@ async function testScreenshotService() {
 
     // Take screenshot
     logger.info('Taking screenshot of sample tweet...');
-    const result = await screenshotService.takeScreenshot(sampleTweet, sampleAuthor, {
+    const result = await screenshotService.takeScreenshot(sampleTweet, {
       width: 600,
       height: 400,
       quality: 80,
