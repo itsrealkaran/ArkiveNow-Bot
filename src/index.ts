@@ -3,6 +3,7 @@ import logger from './utils/logger';
 import databaseService from './services/database';
 import twitterService from './services/twitter';
 import screenshotService from './services/screenshot';
+import botService from './services/bot';
 
 // Main entry point for the Twitter Screenshot Bot
 async function main() {
@@ -33,10 +34,12 @@ async function main() {
     await screenshotService.initialize();
     logger.info('✅ Screenshot service initialized successfully');
 
-    // TODO: Start Twitter polling
-    // TODO: Handle mentions and process screenshots
+    // Start the bot
+    logger.info('🤖 Starting bot service...');
+    await botService.start();
+    logger.info('✅ Bot service started successfully');
 
-    logger.info('✅ Bot initialized successfully');
+    logger.info('🎉 Bot is now running and ready to process mentions!');
   } catch (error) {
     logger.error('❌ Failed to start bot', { error });
     process.exit(1);
@@ -47,8 +50,7 @@ async function main() {
 process.on('SIGINT', async () => {
   logger.info('🛑 Received SIGINT, shutting down gracefully...');
   try {
-    await twitterService.stopPolling();
-    await screenshotService.cleanup();
+    await botService.stop();
     await databaseService.close();
     logger.info('✅ Graceful shutdown completed');
   } catch (error) {
@@ -60,8 +62,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   logger.info('🛑 Received SIGTERM, shutting down gracefully...');
   try {
-    await twitterService.stopPolling();
-    await screenshotService.cleanup();
+    await botService.stop();
     await databaseService.close();
     logger.info('✅ Graceful shutdown completed');
   } catch (error) {

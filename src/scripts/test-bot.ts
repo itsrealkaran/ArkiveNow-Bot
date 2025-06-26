@@ -1,4 +1,3 @@
-import botService from '../services/bot';
 import twitterService from '../services/twitter';
 import screenshotService from '../services/screenshot';
 import arweaveService from '../services/arweave';
@@ -66,6 +65,12 @@ async function testBotFlow() {
     const quotaCheck = await quotaService.checkUserQuota(sampleRequester.username);
     logger.info('Quota check result', { quotaCheck });
 
+    // Get the actual user from database (with proper UUID)
+    const user = await databaseService.getUserByTwitterHandle(sampleRequester.username);
+    if (!user) {
+      throw new Error('User not found in database after quota check');
+    }
+
     // Test 2: Screenshot generation
     logger.info('Test 2: Taking screenshot...');
     const screenshotResult = await screenshotService.takeScreenshot(sampleTweet, sampleAuthor, {
@@ -128,7 +133,7 @@ async function testBotFlow() {
     // Test 6: Usage logging
     logger.info('Test 6: Logging usage...');
     await databaseService.logUsage({
-      user_id: sampleRequester.id,
+      user_id: user.id,
       tweet_id: sampleTweet.id,
       event_type: 'success',
       arweave_id: uploadResult.id,

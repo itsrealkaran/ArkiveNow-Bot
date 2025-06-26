@@ -32,7 +32,7 @@ const fileFormat = winston.format.combine(
 const logger = winston.createLogger({
   level: loggingConfig.level,
   format: fileFormat,
-  defaultMeta: { service: 'twitter-screenshot-bot' },
+  defaultMeta: { service: 'project-k' },
   transports: [
     // Write all logs with level 'error' and below to error.log
     new winston.transports.File({ 

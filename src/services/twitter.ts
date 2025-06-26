@@ -6,6 +6,8 @@ import { TwitterMention, TwitterTweet, TwitterUser } from '../types';
 class TwitterService {
   private client: TwitterApi;
   private lastMentionId: string | null = null;
+  private rateLimitReset: number = 0;
+  private isRateLimited: boolean = false;
 
   constructor() {
     // Initialize Twitter client with user authentication
@@ -19,14 +21,80 @@ class TwitterService {
     logger.info('Twitter client initialized', { botUsername: botConfig.username });
   }
 
+  private async handleRateLimit(error: any): Promise<void> {
+    if (error.code === 429) {
+      this.isRateLimited = true;
+      
+      // Extract rate limit info from headers
+      const resetTime = error.rateLimit?.reset || error.headers?.['x-rate-limit-reset'];
+      if (resetTime) {
+        this.rateLimitReset = parseInt(resetTime) * 1000; // Convert to milliseconds
+        const waitTime = Math.max(this.rateLimitReset - Date.now(), 0);
+        
+        logger.warn('Rate limited by Twitter API', {
+          resetTime: new Date(this.rateLimitReset).toISOString(),
+          waitTimeMs: waitTime,
+          limit: error.rateLimit?.limit,
+          remaining: error.rateLimit?.remaining
+        });
+
+        // Wait for rate limit to reset
+        if (waitTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, waitTime + 1000)); // Add 1 second buffer
+        }
+      } else {
+        // Fallback: wait 15 minutes
+        logger.warn('Rate limited but no reset time found, waiting 15 minutes');
+        await new Promise(resolve => setTimeout(resolve, 15 * 60 * 1000));
+      }
+      
+      this.isRateLimited = false;
+    }
+  }
+
+  private async makeRateLimitedRequest<T>(requestFn: () => Promise<T>): Promise<T> {
+    const maxRetries = 3;
+    let lastError: any;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Check if we're currently rate limited
+        if (this.isRateLimited && Date.now() < this.rateLimitReset) {
+          const waitTime = this.rateLimitReset - Date.now();
+          logger.info('Waiting for rate limit to reset', { waitTimeMs: waitTime });
+          await new Promise(resolve => setTimeout(resolve, waitTime + 1000));
+        }
+
+        return await requestFn();
+      } catch (error: any) {
+        lastError = error;
+        
+        if (error.code === 429) {
+          await this.handleRateLimit(error);
+          continue; // Retry after handling rate limit
+        }
+        
+        // For other errors, don't retry
+        throw error;
+      }
+    }
+
+    throw lastError;
+  }
+
   async verifyCredentials(): Promise<boolean> {
     try {
       const me = await this.client.v2.me();
-      logger.info('Twitter credentials verified', { 
-        userId: me.data.id, 
-        username: me.data.username 
-      });
-      return true;
+      
+      if (me.data) {
+        logger.info('Twitter credentials verified', { 
+          userId: me.data.id, 
+          username: me.data.username 
+        });
+        return true;
+      }
+      
+      return false;
     } catch (error) {
       logger.error('Failed to verify Twitter credentials', { error });
       return false;
@@ -34,129 +102,137 @@ class TwitterService {
   }
 
   async getMentions(): Promise<TwitterMention[]> {
-    try {
-      // First, get the bot's user ID
-      const botUser = await this.client.v2.userByUsername(botConfig.username);
-      if (!botUser.data) {
-        logger.error('Could not find bot user', { username: botConfig.username });
+    return this.makeRateLimitedRequest(async () => {
+      try {
+        // First, get the bot's user ID
+        const botUser = await this.client.v2.userByUsername(botConfig.username);
+        if (!botUser.data) {
+          logger.error('Could not find bot user', { username: botConfig.username });
+          return [];
+        }
+
+        const botUserId = botUser.data.id;
+
+        const params: any = {
+          max_results: 10,
+          'tweet.fields': ['created_at', 'author_id', 'in_reply_to_user_id', 'referenced_tweets'],
+          'user.fields': ['username', 'name'],
+          expansions: ['author_id', 'referenced_tweets.id'],
+        };
+
+        // Only add since_id if we have a last mention ID
+        if (this.lastMentionId) {
+          params.since_id = this.lastMentionId;
+        }
+
+        const mentions = await this.client.v2.userMentionTimeline(botUserId, params);
+
+        if (mentions.data && Array.isArray(mentions.data) && mentions.data.length > 0) {
+          // Update last mention ID for next poll
+          this.lastMentionId = mentions.data[0].id;
+          
+          logger.info('Found new mentions', { 
+            count: mentions.data.length,
+            latestId: this.lastMentionId 
+          });
+        }
+
+        return Array.isArray(mentions.data) ? mentions.data : [];
+      } catch (error) {
+        logger.error('Failed to fetch mentions', { error });
         return [];
       }
-
-      const botUserId = botUser.data.id;
-
-      const params: any = {
-        max_results: 10,
-        'tweet.fields': ['created_at', 'author_id', 'in_reply_to_user_id', 'referenced_tweets'],
-        'user.fields': ['username', 'name'],
-        expansions: ['author_id', 'referenced_tweets.id'],
-      };
-
-      // Only add since_id if we have a last mention ID
-      if (this.lastMentionId) {
-        params.since_id = this.lastMentionId;
-      }
-
-      const mentions = await this.client.v2.userMentionTimeline(botUserId, params);
-
-      if (mentions.data && Array.isArray(mentions.data) && mentions.data.length > 0) {
-        // Update last mention ID for next poll
-        this.lastMentionId = mentions.data[0].id;
-        
-        logger.info('Found new mentions', { 
-          count: mentions.data.length,
-          latestId: this.lastMentionId 
-        });
-      }
-
-      return Array.isArray(mentions.data) ? mentions.data : [];
-    } catch (error) {
-      logger.error('Failed to fetch mentions', { error });
-      return [];
-    }
+    });
   }
 
   async getTweet(tweetId: string): Promise<TwitterTweet | null> {
-    try {
-      const tweet = await this.client.v2.singleTweet(tweetId, {
-        'tweet.fields': ['created_at', 'author_id', 'public_metrics'],
-        'user.fields': ['username', 'name'],
-        expansions: ['author_id'],
-      });
+    return this.makeRateLimitedRequest(async () => {
+      try {
+        const tweet = await this.client.v2.singleTweet(tweetId, {
+          'tweet.fields': ['created_at', 'author_id', 'public_metrics'],
+          'user.fields': ['username', 'name'],
+          expansions: ['author_id'],
+        });
 
-      if (!tweet.data) {
-        logger.warn('Tweet not found', { tweetId });
-        return null;
-      }
+        if (!tweet.data) {
+          logger.warn('Tweet not found', { tweetId });
+          return null;
+        }
 
-      // Ensure required fields are present
-      if (!tweet.data.author_id) {
-        logger.warn('Tweet missing author_id', { tweetId });
-        return null;
-      }
+        // Ensure required fields are present
+        if (!tweet.data.author_id) {
+          logger.warn('Tweet missing author_id', { tweetId });
+          return null;
+        }
 
-      const twitterTweet: TwitterTweet = {
-        id: tweet.data.id,
-        text: tweet.data.text,
-        author_id: tweet.data.author_id,
-        created_at: tweet.data.created_at || new Date().toISOString(),
-      };
-
-      // Add public_metrics only if it exists
-      if (tweet.data.public_metrics) {
-        twitterTweet.public_metrics = {
-          retweet_count: tweet.data.public_metrics.retweet_count || 0,
-          reply_count: tweet.data.public_metrics.reply_count || 0,
-          like_count: tweet.data.public_metrics.like_count || 0,
-          quote_count: tweet.data.public_metrics.quote_count || 0,
+        const twitterTweet: TwitterTweet = {
+          id: tweet.data.id,
+          text: tweet.data.text,
+          author_id: tweet.data.author_id,
+          created_at: tweet.data.created_at || new Date().toISOString(),
         };
+
+        // Add public_metrics only if it exists
+        if (tweet.data.public_metrics) {
+          twitterTweet.public_metrics = {
+            retweet_count: tweet.data.public_metrics.retweet_count || 0,
+            reply_count: tweet.data.public_metrics.reply_count || 0,
+            like_count: tweet.data.public_metrics.like_count || 0,
+            quote_count: tweet.data.public_metrics.quote_count || 0,
+          };
+        }
+
+        logger.info('Retrieved tweet', { 
+          tweetId, 
+          authorId: twitterTweet.author_id,
+          textLength: twitterTweet.text.length 
+        });
+
+        return twitterTweet;
+      } catch (error) {
+        logger.error('Failed to fetch tweet', { tweetId, error });
+        return null;
       }
-
-      logger.info('Retrieved tweet', { 
-        tweetId, 
-        authorId: twitterTweet.author_id,
-        textLength: twitterTweet.text.length 
-      });
-
-      return twitterTweet;
-    } catch (error) {
-      logger.error('Failed to fetch tweet', { tweetId, error });
-      return null;
-    }
+    });
   }
 
   async getUser(userId: string): Promise<TwitterUser | null> {
-    try {
-      const user = await this.client.v2.user(userId, {
-        'user.fields': ['username', 'name', 'profile_image_url'],
-      });
+    return this.makeRateLimitedRequest(async () => {
+      try {
+        const user = await this.client.v2.user(userId, {
+          'user.fields': ['username', 'name', 'profile_image_url'],
+        });
 
-      if (!user.data) {
-        logger.warn('User not found', { userId });
+        if (!user.data) {
+          logger.warn('User not found', { userId });
+          return null;
+        }
+
+        return user.data;
+      } catch (error) {
+        logger.error('Failed to fetch user', { userId, error });
         return null;
       }
-
-      return user.data;
-    } catch (error) {
-      logger.error('Failed to fetch user', { userId, error });
-      return null;
-    }
+    });
   }
 
   async replyToTweet(tweetId: string, text: string): Promise<boolean> {
-    try {
-      const reply = await this.client.v2.reply(text, tweetId);
-      
-      logger.info('Replied to tweet', { 
-        tweetId, 
-        replyId: reply.data.id,
-        textLength: text.length 
-      });
-      
-      return true;
-    } catch (error) {
-      logger.error('Failed to reply to tweet', { tweetId, error });
-      return false;
-    }
+    return this.makeRateLimitedRequest(async () => {
+      try {
+        const reply = await this.client.v2.reply(text, tweetId);
+        
+        logger.info('Replied to tweet', { 
+          tweetId, 
+          replyId: reply.data.id,
+          textLength: text.length 
+        });
+        
+        return true;
+      } catch (error) {
+        logger.error('Failed to reply to tweet', { tweetId, error });
+        return false;
+      }
+    });
   }
 
   async replyWithMedia(tweetId: string, text: string, mediaPath: string): Promise<boolean> {
