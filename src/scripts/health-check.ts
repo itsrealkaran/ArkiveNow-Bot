@@ -5,7 +5,6 @@ import arweaveService from '../services/arweave';
 import quotaService from '../services/quota';
 import botService from '../services/bot';
 import logger from '../utils/logger';
-import { config } from '../config';
 
 interface HealthStatus {
   timestamp: string;
