@@ -80,31 +80,18 @@ class BotService {
         return;
       }
 
-      // Step 5: Get tweet author (optional, only if needed for screenshot)
-      const author = await twitterService.getUser(tweet.author_id);
-      if (!author) {
-        await this.handleError(mention, 'Could not get tweet author information');
-        return;
-      }
-
-      // Step 6: Take screenshot
-      const screenshotResult = await screenshotService.takeScreenshot(tweet, author, {
-        width: 600,
-        height: 400,
-        quality: 80,
-        format: 'jpeg',
-      });
-
+      // Step 5: Take screenshot (no author lookup)
+      const screenshotResult = await screenshotService.takeScreenshot(tweet, {});
       if (!screenshotResult.success || !screenshotResult.buffer) {
         await this.handleError(mention, `Screenshot failed: ${screenshotResult.error}`);
         return;
       }
 
-      // Step 7: Upload to Arweave
+      // Step 6: Upload to Arweave
       const uploadResult = await arweaveService.uploadScreenshot(
         screenshotResult,
         tweet.id,
-        author.username,
+        tweet.author_id,
         tweet.text
       );
 
@@ -113,10 +100,10 @@ class BotService {
         return;
       }
 
-      // Step 8: Increment user quota using author_id
+      // Step 7: Increment user quota using author_id
       await quotaService.incrementUserQuota(mention.author_id);
 
-      // Step 9: Log successful usage
+      // Step 8: Log successful usage
       await databaseService.logUsage({
         user_id: mention.author_id,
         tweet_id: tweet.id,
@@ -124,8 +111,8 @@ class BotService {
         arweave_id: uploadResult.id,
       });
 
-      // Step 10: Reply with success message
-      await this.handleSuccess(mention, uploadResult.id, tweet.id, author.username);
+      // Step 9: Reply with success message
+      await this.handleSuccess(mention, uploadResult.id, tweet.id, tweet.author_id);
 
       logger.info('Successfully processed mention', {
         mentionId: mention.id,

@@ -290,26 +290,9 @@ class TwitterService {
   }
 
   async isPublicTweet(tweet: TwitterTweet): Promise<boolean> {
-    try {
-      // Get the author of the tweet
-      const author = await this.getUser(tweet.author_id);
-      
-      if (!author) {
-        logger.warn('Could not determine tweet visibility - author not found', { 
-          tweetId: tweet.id, 
-          authorId: tweet.author_id 
-        });
-        return false;
-      }
-
-      // For now, we'll assume all tweets are public
-      // In a more sophisticated implementation, you might check the user's protected status
-      // or the tweet's visibility settings
-      return true;
-    } catch (error) {
-      logger.error('Error checking tweet visibility', { tweetId: tweet.id, error });
-      return false;
-    }
+    // For now, we'll assume all tweets are public
+    // In a more sophisticated implementation, you might check the tweet's visibility settings if available in the tweet object
+    return true;
   }
 
   extractTweetIdFromMention(mention: TwitterMention): string | null {

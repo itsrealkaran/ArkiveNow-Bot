@@ -38,7 +38,6 @@ class ScreenshotService {
 
   async takeScreenshot(
     tweet: TwitterTweet,
-    author: TwitterUser,
     options: ScreenshotOptions = {}
   ): Promise<ScreenshotResult> {
     if (!this.browser) {
