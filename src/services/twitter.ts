@@ -122,6 +122,7 @@ class TwitterService {
     return this.makeRateLimitedRequest(async () => {
       // Use cached bot user ID
       const botUserId = await this.getBotUserId();
+      logger.info('Getting mentions for bot user', { botUserId, botUsername: botConfig.username });
 
       const params: any = {
         max_results: 10,
@@ -133,21 +134,79 @@ class TwitterService {
       // Only add since_id if we have a last mention ID
       if (this.lastMentionId) {
         params.since_id = this.lastMentionId;
+        logger.info('Using since_id filter', { since_id: this.lastMentionId });
+      } else {
+        logger.info('No since_id filter - getting all recent mentions');
       }
 
-      const mentions = await this.client.v2.userMentionTimeline(botUserId, params);
+      logger.info('Making userMentionTimeline API call with params:', params);
 
-      if (mentions.data && Array.isArray(mentions.data) && mentions.data.length > 0) {
-        // Update last mention ID for next poll
-        this.lastMentionId = mentions.data[0].id;
+      try {
+        const mentions = await this.client.v2.userMentionTimeline(botUserId, params);
+        console.log(mentions);
         
-        logger.info('Found new mentions', { 
-          count: mentions.data.length,
-          latestId: this.lastMentionId 
+        logger.info('Raw API response received:', {
+          hasData: !!mentions.data,
+          dataType: typeof mentions.data,
+          dataLength: Array.isArray(mentions.data) ? mentions.data.length : 'not array',
+          includes: mentions.includes ? Object.keys(mentions.includes) : 'none',
+          meta: mentions.meta || 'none',
+          fullResponseKeys: Object.keys(mentions)
         });
-      }
 
-      return Array.isArray(mentions.data) ? mentions.data : [];
+        // Handle different possible response structures
+        let mentionsData: any[] = [];
+        
+        if (mentions.data && Array.isArray(mentions.data)) {
+          // Standard array format
+          mentionsData = mentions.data;
+        } else if (mentions.data && typeof mentions.data === 'object') {
+          // Object format - might be paginated or nested
+          logger.info('Data is object, checking structure:', mentions.data);
+          const dataObj = mentions.data as any;
+          if (dataObj.result && Array.isArray(dataObj.result)) {
+            mentionsData = dataObj.result;
+          } else if (dataObj.data && Array.isArray(dataObj.data)) {
+            mentionsData = dataObj.data;
+          } else {
+            // Try to convert object to array if it has numeric keys
+            const keys = Object.keys(mentions.data);
+            if (keys.some(key => !isNaN(Number(key)))) {
+              mentionsData = Object.values(mentions.data);
+            }
+          }
+        } else if ((mentions as any).result && Array.isArray((mentions as any).result)) {
+          // Direct result array
+          mentionsData = (mentions as any).result;
+        }
+
+        logger.info('Processed mentions data:', {
+          processedLength: mentionsData.length,
+          isArray: Array.isArray(mentionsData),
+          firstItem: mentionsData.length > 0 ? typeof mentionsData[0] : 'none'
+        });
+
+        if (mentionsData.length > 0) {
+          // Update last mention ID for next poll
+          this.lastMentionId = mentionsData[0].id;
+          
+          logger.info('Found new mentions', { 
+            count: mentionsData.length,
+            latestId: this.lastMentionId 
+          });
+        } else {
+          logger.info('No mentions data in response or empty array');
+        }
+
+        return mentionsData;
+      } catch (error) {
+        logger.error('Error in userMentionTimeline API call:', {
+          error: error instanceof Error ? error.message : error,
+          botUserId,
+          params
+        });
+        throw error;
+      }
     });
   }
 
