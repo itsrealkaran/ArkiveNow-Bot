@@ -8,6 +8,7 @@ class TwitterService {
   private lastMentionId: string | null = null;
   private rateLimitReset: number = 0;
   private isRateLimited: boolean = false;
+  private botUserId: string | null = null; // Cache for bot user ID
 
   constructor() {
     // Initialize Twitter client with user authentication
@@ -101,47 +102,52 @@ class TwitterService {
     }
   }
 
+  /**
+   * Get and cache the bot user ID
+   */
+  private async getBotUserId(): Promise<string> {
+    if (this.botUserId) {
+      return this.botUserId;
+    }
+    const botUser = await this.client.v2.userByUsername(botConfig.username);
+    if (!botUser.data) {
+      logger.error('Could not find bot user', { username: botConfig.username });
+      throw new Error('Could not find bot user');
+    }
+    this.botUserId = botUser.data.id;
+    return this.botUserId;
+  }
+
   async getMentions(): Promise<TwitterMention[]> {
     return this.makeRateLimitedRequest(async () => {
-      try {
-        // First, get the bot's user ID
-        const botUser = await this.client.v2.userByUsername(botConfig.username);
-        if (!botUser.data) {
-          logger.error('Could not find bot user', { username: botConfig.username });
-          return [];
-        }
+      // Use cached bot user ID
+      const botUserId = await this.getBotUserId();
 
-        const botUserId = botUser.data.id;
+      const params: any = {
+        max_results: 10,
+        'tweet.fields': ['created_at', 'author_id', 'in_reply_to_user_id', 'referenced_tweets'],
+        'user.fields': ['username', 'name'],
+        expansions: ['author_id', 'referenced_tweets.id'],
+      };
 
-        const params: any = {
-          max_results: 10,
-          'tweet.fields': ['created_at', 'author_id', 'in_reply_to_user_id', 'referenced_tweets'],
-          'user.fields': ['username', 'name'],
-          expansions: ['author_id', 'referenced_tweets.id'],
-        };
-
-        // Only add since_id if we have a last mention ID
-        if (this.lastMentionId) {
-          params.since_id = this.lastMentionId;
-        }
-
-        const mentions = await this.client.v2.userMentionTimeline(botUserId, params);
-
-        if (mentions.data && Array.isArray(mentions.data) && mentions.data.length > 0) {
-          // Update last mention ID for next poll
-          this.lastMentionId = mentions.data[0].id;
-          
-          logger.info('Found new mentions', { 
-            count: mentions.data.length,
-            latestId: this.lastMentionId 
-          });
-        }
-
-        return Array.isArray(mentions.data) ? mentions.data : [];
-      } catch (error) {
-        logger.error('Failed to fetch mentions', { error });
-        return [];
+      // Only add since_id if we have a last mention ID
+      if (this.lastMentionId) {
+        params.since_id = this.lastMentionId;
       }
+
+      const mentions = await this.client.v2.userMentionTimeline(botUserId, params);
+
+      if (mentions.data && Array.isArray(mentions.data) && mentions.data.length > 0) {
+        // Update last mention ID for next poll
+        this.lastMentionId = mentions.data[0].id;
+        
+        logger.info('Found new mentions', { 
+          count: mentions.data.length,
+          latestId: this.lastMentionId 
+        });
+      }
+
+      return Array.isArray(mentions.data) ? mentions.data : [];
     });
   }
 
