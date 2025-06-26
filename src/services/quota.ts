@@ -166,6 +166,19 @@ class QuotaService {
       logger.error('Error resetting monthly quotas', { error });
     }
   }
+
+  async checkHealth(): Promise<boolean> {
+    try {
+      // Test quota service by checking a test user
+      const testQuota = await this.checkUserQuota('health-check-test');
+      
+      // If we can check quota without error, service is healthy
+      return true;
+    } catch (error) {
+      logger.error('Quota service health check failed', { error });
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

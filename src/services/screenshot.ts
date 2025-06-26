@@ -332,6 +332,23 @@ class ScreenshotService {
       logger.info('Screenshot service browser closed');
     }
   }
+
+  async checkBrowserHealth(): Promise<boolean> {
+    try {
+      if (!this.browser) {
+        return false;
+      }
+
+      // Try to create a new page to test browser health
+      const page = await this.browser.newPage();
+      await page.close();
+      
+      return true;
+    } catch (error) {
+      logger.error('Browser health check failed', { error });
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

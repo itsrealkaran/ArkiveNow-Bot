@@ -228,6 +228,33 @@ Tweet ID: ${tweetId}`;
       return false;
     }
   }
+
+  /**
+   * Check if Arweave wallet is loaded
+   */
+  isWalletLoaded(): boolean {
+    try {
+      // Check if the ARWEAVE_JWK environment variable is set and valid
+      const jwk = process.env.ARWEAVE_JWK;
+      if (!jwk) {
+        return false;
+      }
+
+      // Try to parse the JWK to validate it
+      const parsedJwk = JSON.parse(jwk);
+      return !!(parsedJwk && parsedJwk.kty && parsedJwk.n);
+    } catch (error) {
+      logger.error('Failed to validate Arweave wallet', { error });
+      return false;
+    }
+  }
+
+  /**
+   * Check health of Arweave service (alias for healthCheck)
+   */
+  async checkHealth(): Promise<boolean> {
+    return this.healthCheck();
+  }
 }
 
 // Export singleton instance

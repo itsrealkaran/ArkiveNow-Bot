@@ -230,6 +230,34 @@ class DatabaseService {
     await this.pool.end();
     logger.info('Database connection pool closed');
   }
+
+  async checkTablesExist(): Promise<boolean> {
+    const client = await this.pool.connect();
+    
+    try {
+      // Check if all required tables exist
+      const result = await client.query(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name IN ('users', 'usage_logs', 'user_quotas')
+      `);
+      
+      const existingTables = result.rows.map(row => row.table_name);
+      const requiredTables = ['users', 'usage_logs', 'user_quotas'];
+      const allTablesExist = requiredTables.every(table => existingTables.includes(table));
+      
+      logger.info('Database tables check', { 
+        existingTables, 
+        requiredTables, 
+        allTablesExist 
+      });
+      
+      return allTablesExist;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 // Export singleton instance
