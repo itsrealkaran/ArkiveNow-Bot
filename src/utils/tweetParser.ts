@@ -147,29 +147,6 @@ export class TweetParser {
    * Check if a mention is a valid request for screenshot
    */
   static isValidScreenshotRequest(mention: TwitterMention): boolean {
-    const text = mention.text.toLowerCase();
-    
-    // Look for screenshot-related keywords
-    const screenshotKeywords = [
-      'screenshot',
-      'screencap',
-      'capture',
-      'save',
-      'preserve',
-      'backup',
-      'archive',
-    ];
-
-    const hasKeyword = screenshotKeywords.some(keyword => text.includes(keyword));
-    
-    if (!hasKeyword) {
-      logger.info('Mention does not contain screenshot keywords', { 
-        mentionId: mention.id,
-        text: text.substring(0, 50) + '...' 
-      });
-      return false;
-    }
-
     // Check if we can extract a tweet ID
     const parsed = this.parseMention(mention);
     if (!parsed.tweetId) {

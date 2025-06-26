@@ -143,57 +143,22 @@ class TwitterService {
 
       try {
         const mentions = await this.client.v2.userMentionTimeline(botUserId, params);
-        console.log(mentions);
-        
+        // Extract mentions from paginator's _realData.data
+        const mentionsData: any[] = (mentions as any)._realData?.data || [];
+
         logger.info('Raw API response received:', {
-          hasData: !!mentions.data,
-          dataType: typeof mentions.data,
-          dataLength: Array.isArray(mentions.data) ? mentions.data.length : 'not array',
-          includes: mentions.includes ? Object.keys(mentions.includes) : 'none',
-          meta: mentions.meta || 'none',
-          fullResponseKeys: Object.keys(mentions)
-        });
-
-        // Handle different possible response structures
-        let mentionsData: any[] = [];
-        
-        if (mentions.data && Array.isArray(mentions.data)) {
-          // Standard array format
-          mentionsData = mentions.data;
-        } else if (mentions.data && typeof mentions.data === 'object') {
-          // Object format - might be paginated or nested
-          logger.info('Data is object, checking structure:', mentions.data);
-          const dataObj = mentions.data as any;
-          if (dataObj.result && Array.isArray(dataObj.result)) {
-            mentionsData = dataObj.result;
-          } else if (dataObj.data && Array.isArray(dataObj.data)) {
-            mentionsData = dataObj.data;
-          } else {
-            // Try to convert object to array if it has numeric keys
-            const keys = Object.keys(mentions.data);
-            if (keys.some(key => !isNaN(Number(key)))) {
-              mentionsData = Object.values(mentions.data);
-            }
-          }
-        } else if ((mentions as any).result && Array.isArray((mentions as any).result)) {
-          // Direct result array
-          mentionsData = (mentions as any).result;
-        }
-
-        logger.info('Processed mentions data:', {
+          hasData: mentionsData.length > 0,
           processedLength: mentionsData.length,
           isArray: Array.isArray(mentionsData),
-          firstItem: mentionsData.length > 0 ? typeof mentionsData[0] : 'none'
+          firstItem: mentionsData.length > 0 ? typeof mentionsData[0] : 'none',
+          meta: (mentions as any)._realData?.meta || 'none',
+          fullResponseKeys: Object.keys(mentions)
         });
 
         if (mentionsData.length > 0) {
           // Update last mention ID for next poll
           this.lastMentionId = mentionsData[0].id;
-          
-          logger.info('Found new mentions', { 
-            count: mentionsData.length,
-            latestId: this.lastMentionId 
-          });
+          logger.info('Found new mentions', { count: mentionsData.length, latestId: this.lastMentionId });
         } else {
           logger.info('No mentions data in response or empty array');
         }
@@ -415,6 +380,17 @@ class TwitterService {
     logger.info('Stopping Twitter mention polling');
     // Note: setInterval doesn't have a direct stop method
     // In a production environment, you might want to use a proper scheduler
+  }
+
+  /**
+   * Extract the parent tweet ID (the tweet being replied to) from a mention.
+   */
+  extractParentTweetId(mention: TwitterMention): string | null {
+    if (mention.referenced_tweets && Array.isArray(mention.referenced_tweets)) {
+      const repliedTo = mention.referenced_tweets.find(ref => ref.type === 'replied_to');
+      return repliedTo ? repliedTo.id : null;
+    }
+    return null;
   }
 }
 

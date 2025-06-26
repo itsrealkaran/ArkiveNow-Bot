@@ -43,59 +43,51 @@ class BotService {
       logger.info('Processing mention', { 
         mentionId: mention.id, 
         authorId: mention.author_id,
-        text: mention.text.substring(0, 50) + '...' 
+        text: mention.text
       });
 
-      // Step 1: Parse the mention
-      const parsed = TweetParser.parseMention(mention);
-      if (!parsed.tweetId) {
-        await this.handleInvalidRequest(mention, parsed);
+      // Step 1: Extract the target tweet ID (parent tweet or referenced tweet)
+      let targetTweetId = twitterService.extractParentTweetId(mention);
+      if (!targetTweetId) {
+        // Fallback: Try to extract from mention text (URL, quoted, ID, etc.)
+        const parsed = TweetParser.parseMention(mention);
+        targetTweetId = parsed.tweetId;
+      }
+      if (!targetTweetId) {
+        logger.warn('No valid tweet reference found in mention', { mentionId: mention.id, text: mention.text });
+        await this.handleInvalidRequest(mention, { tweetId: null, type: 'invalid', originalText: mention.text });
         return;
       }
 
-      // Step 2: Check if it's a valid screenshot request
-      if (!TweetParser.isValidScreenshotRequest(mention)) {
-        await this.handleInvalidRequest(mention, parsed);
-        return;
-      }
-
-      // Step 3: Get the user who made the request
-      const requester = await twitterService.getUser(mention.author_id);
-      if (!requester) {
-        logger.error('Could not get requester user', { authorId: mention.author_id });
-        await this.handleError(mention, 'Could not identify the user making the request');
-        return;
-      }
-
-      // Step 4: Check user quota
-      const quotaCheck = await quotaService.checkUserQuota(requester.username);
+      // Step 2: Check user quota using author_id
+      const quotaCheck = await quotaService.checkUserQuota(mention.author_id);
       if (!quotaCheck.allowed) {
-        await this.handleQuotaExceeded(mention, requester.username, quotaCheck);
+        await this.handleQuotaExceeded(mention, mention.author_id, quotaCheck);
         return;
       }
 
-      // Step 5: Get the target tweet
-      const tweet = await twitterService.getTweet(parsed.tweetId);
+      // Step 3: Get the target tweet
+      const tweet = await twitterService.getTweet(targetTweetId);
       if (!tweet) {
-        await this.handleError(mention, 'Could not find the specified tweet');
+        await this.handleError(mention, 'Could not find the tweet to screenshot');
         return;
       }
 
-      // Step 6: Check if tweet is public
+      // Step 4: Check if tweet is public
       const isPublic = await twitterService.isPublicTweet(tweet);
       if (!isPublic) {
         await this.handleError(mention, 'Cannot screenshot private tweets');
         return;
       }
 
-      // Step 7: Get tweet author
+      // Step 5: Get tweet author (optional, only if needed for screenshot)
       const author = await twitterService.getUser(tweet.author_id);
       if (!author) {
         await this.handleError(mention, 'Could not get tweet author information');
         return;
       }
 
-      // Step 8: Take screenshot
+      // Step 6: Take screenshot
       const screenshotResult = await screenshotService.takeScreenshot(tweet, author, {
         width: 600,
         height: 400,
@@ -108,7 +100,7 @@ class BotService {
         return;
       }
 
-      // Step 9: Upload to Arweave
+      // Step 7: Upload to Arweave
       const uploadResult = await arweaveService.uploadScreenshot(
         screenshotResult,
         tweet.id,
@@ -121,25 +113,25 @@ class BotService {
         return;
       }
 
-      // Step 10: Increment user quota
-      await quotaService.incrementUserQuota(requester.username);
+      // Step 8: Increment user quota using author_id
+      await quotaService.incrementUserQuota(mention.author_id);
 
-      // Step 11: Log successful usage
+      // Step 9: Log successful usage
       await databaseService.logUsage({
-        user_id: requester.id,
+        user_id: mention.author_id,
         tweet_id: tweet.id,
         event_type: 'success',
         arweave_id: uploadResult.id,
       });
 
-      // Step 12: Reply with success message
+      // Step 10: Reply with success message
       await this.handleSuccess(mention, uploadResult.id, tweet.id, author.username);
 
       logger.info('Successfully processed mention', {
         mentionId: mention.id,
         tweetId: tweet.id,
         arweaveId: uploadResult.id,
-        requester: requester.username,
+        requester: mention.author_id,
       });
 
     } catch (error) {
@@ -184,14 +176,14 @@ class BotService {
    */
   private async handleQuotaExceeded(
     mention: TwitterMention,
-    username: string,
+    authorId: string,
     quotaCheck: QuotaCheck
   ): Promise<void> {
     try {
       // Log quota exceeded event
-      await quotaService.logQuotaExceeded(username, mention.id, quotaCheck.reason || 'Quota exceeded');
+      await quotaService.logQuotaExceeded(authorId, mention.id, quotaCheck.reason || 'Quota exceeded');
 
-      const message = `❌ Sorry @${username}, you've reached your limit for today.
+      const message = `❌ Sorry, you've reached your limit for today.
 
 Daily remaining: ${quotaCheck.daily_remaining}
 Monthly remaining: ${quotaCheck.monthly_remaining}
@@ -201,7 +193,7 @@ Please try again tomorrow!`;
       const replySuccess = await twitterService.replyToTweet(mention.id, message);
       
       if (replySuccess) {
-        logger.info('Quota exceeded reply sent', { mentionId: mention.id, username });
+        logger.info('Quota exceeded reply sent', { mentionId: mention.id, authorId });
       } else {
         logger.error('Failed to send quota exceeded reply', { mentionId: mention.id });
       }

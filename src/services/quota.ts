@@ -4,13 +4,10 @@ import logger from '../utils/logger';
 import { QuotaCheck } from '../types';
 
 class QuotaService {
-  async checkUserQuota(twitterHandle: string): Promise<QuotaCheck> {
+  async checkUserQuota(authorId: string): Promise<QuotaCheck> {
     try {
-      // Get or create user
-      const user = await databaseService.getOrCreateUser(twitterHandle);
-      
       // Get current quota
-      const quota = await databaseService.getUserQuota(user.id);
+      const quota = await databaseService.getUserQuota(authorId);
       
       if (!quota) {
         // First time user, allow the request
@@ -28,7 +25,7 @@ class QuotaService {
       // Check if user has exceeded limits
       if (quota.daily_requests >= botConfig.maxDailyRequests) {
         logger.info('User exceeded daily quota', { 
-          twitterHandle, 
+          authorId, 
           dailyRequests: quota.daily_requests,
           maxDaily: botConfig.maxDailyRequests 
         });
@@ -43,7 +40,7 @@ class QuotaService {
 
       if (quota.monthly_requests >= botConfig.maxMonthlyRequests) {
         logger.info('User exceeded monthly quota', { 
-          twitterHandle, 
+          authorId, 
           monthlyRequests: quota.monthly_requests,
           maxMonthly: botConfig.maxMonthlyRequests 
         });
@@ -62,7 +59,7 @@ class QuotaService {
         monthly_remaining: monthlyRemaining,
       };
     } catch (error) {
-      logger.error('Error checking user quota', { twitterHandle, error });
+      logger.error('Error checking user quota', { authorId, error });
       // In case of error, allow the request to prevent blocking users
       return {
         allowed: true,
@@ -72,46 +69,37 @@ class QuotaService {
     }
   }
 
-  async incrementUserQuota(twitterHandle: string): Promise<void> {
+  async incrementUserQuota(authorId: string): Promise<void> {
     try {
-      const user = await databaseService.getOrCreateUser(twitterHandle);
-      await databaseService.createOrUpdateUserQuota(user.id);
-      
-      logger.info('Incremented user quota', { twitterHandle, userId: user.id });
+      await databaseService.createOrUpdateUserQuota(authorId);
+      logger.info('Incremented user quota', { authorId });
     } catch (error) {
-      logger.error('Error incrementing user quota', { twitterHandle, error });
+      logger.error('Error incrementing user quota', { authorId, error });
     }
   }
 
-  async logQuotaExceeded(twitterHandle: string, tweetId: string, reason: string): Promise<void> {
+  async logQuotaExceeded(authorId: string, tweetId: string, reason: string): Promise<void> {
     try {
-      const user = await databaseService.getOrCreateUser(twitterHandle);
-      
       await databaseService.logUsage({
-        user_id: user.id,
+        user_id: authorId,
         tweet_id: tweetId,
         event_type: 'quota_exceeded',
         error_message: reason,
       });
-      
-      logger.info('Logged quota exceeded event', { 
-        twitterHandle, 
-        tweetId, 
-        reason 
-      });
+      logger.info('Logged quota exceeded event', { authorId, tweetId, reason });
     } catch (error) {
-      logger.error('Error logging quota exceeded', { twitterHandle, tweetId, error });
+      logger.error('Error logging quota exceeded', { authorId, tweetId, error });
     }
   }
 
-  async getQuotaStatus(twitterHandle: string): Promise<{
+  async getQuotaStatus(authorId: string): Promise<{
     daily_used: number;
     daily_remaining: number;
     monthly_used: number;
     monthly_remaining: number;
   }> {
     try {
-      const user = await databaseService.getUserByTwitterHandle(twitterHandle);
+      const user = await databaseService.getUserByTwitterHandle(authorId);
       if (!user) {
         return {
           daily_used: 0,
@@ -138,7 +126,7 @@ class QuotaService {
         monthly_remaining: Math.max(0, botConfig.maxMonthlyRequests - quota.monthly_requests),
       };
     } catch (error) {
-      logger.error('Error getting quota status', { twitterHandle, error });
+      logger.error('Error getting quota status', { authorId, error });
       return {
         daily_used: 0,
         daily_remaining: botConfig.maxDailyRequests,
