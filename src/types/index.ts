@@ -34,7 +34,7 @@ export interface TwitterTweet {
 // Database Types
 export interface User {
   id: string;
-  twitter_handle: string;
+  author_id: string;
   created_at: Date;
   updated_at: Date;
 }

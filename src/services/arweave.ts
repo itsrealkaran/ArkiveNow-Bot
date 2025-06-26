@@ -144,16 +144,10 @@ class ArweaveService {
   generateUploadMessage(
     arweaveId: string,
     tweetId: string,
-    authorUsername: string
+    authorId: string
   ): string {
     const arweaveUrl = this.generateArweaveUrl(arweaveId);
-    return `📸 Screenshot saved! 
-
-Tweet by @${authorUsername} has been preserved on Arweave.
-
-🔗 View: ${arweaveUrl}
-
-#PermaSnap #Arweave`;
+    return `📸 Screenshot saved! \n\nTweet by user ${authorId} has been preserved on Arweave.\n\n🔗 View: ${arweaveUrl}\n\n#PermaSnap #Arweave`;
   }
 
   /**

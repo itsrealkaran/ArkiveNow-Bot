@@ -149,14 +149,12 @@ class BotService {
     mention: TwitterMention,
     arweaveId: string,
     tweetId: string,
-    authorUsername: string
+    authorId: string
   ): Promise<void> {
     try {
-      const message = arweaveService.generateUploadMessage(arweaveId, tweetId, authorUsername);
-      
+      const message = arweaveService.generateUploadMessage(arweaveId, tweetId, authorId);
       // Reply with the message
       const replySuccess = await twitterService.replyToTweet(mention.id, message);
-      
       if (replySuccess) {
         logger.info('Success reply sent', { 
           mentionId: mention.id, 

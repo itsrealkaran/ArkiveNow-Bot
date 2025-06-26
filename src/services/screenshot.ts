@@ -56,7 +56,7 @@ class ScreenshotService {
       await page.setViewport({ width, height });
 
       // Generate HTML for the tweet
-      const html = this.generateTweetHTML(tweet, author);
+      const html = this.generateTweetHTML(tweet);
       await page.setContent(html, { waitUntil: 'networkidle0' });
 
       // Take screenshot
@@ -115,10 +115,8 @@ class ScreenshotService {
     }
   }
 
-  private generateTweetHTML(tweet: TwitterTweet, author: TwitterUser): string {
-    const profileImage = author.profile_image_url || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png';
-    const displayName = author.name || author.username;
-    const username = author.username;
+  private generateTweetHTML(tweet: TwitterTweet): string {
+    const displayName = tweet.author_id;
     const tweetText = this.escapeHtml(tweet.text);
     const tweetDate = new Date(tweet.created_at).toLocaleDateString('en-US', {
       month: 'short',
@@ -236,20 +234,15 @@ class ScreenshotService {
       <body>
         <div class="tweet-container">
           <div class="tweet-header">
-            <img src="${profileImage}" alt="Profile" class="profile-image">
             <div class="user-info">
               <div class="display-name">${this.escapeHtml(displayName)}</div>
-              <div class="username">@${username}</div>
             </div>
           </div>
-          
           <div class="tweet-content">${tweetText}</div>
-          
           <div class="tweet-meta">
             <span class="tweet-date">${tweetDate}</span>
             <span class="tweet-id">ID: ${tweet.id}</span>
           </div>
-          
           ${tweet.public_metrics ? `
             <div class="metrics">
               <div class="metric">
