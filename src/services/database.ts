@@ -39,7 +39,7 @@ class DatabaseService {
       await client.query(`
         CREATE TABLE IF NOT EXISTS users (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          twitter_handle VARCHAR(255) UNIQUE NOT NULL,
+          author_id VARCHAR(32) UNIQUE NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
@@ -73,27 +73,23 @@ class DatabaseService {
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_usage_logs_user_id ON usage_logs(user_id);
         CREATE INDEX IF NOT EXISTS idx_usage_logs_created_at ON usage_logs(created_at);
-        CREATE INDEX IF NOT EXISTS idx_users_twitter_handle ON users(twitter_handle);
+        CREATE INDEX IF NOT EXISTS idx_users_author_id ON users(author_id);
       `);
 
       await client.query('COMMIT');
       logger.info('✅ Database tables initialized successfully');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('❌ Failed to initialize database tables', { error });
-      throw error;
     } finally {
       client.release();
     }
   }
 
-  async getUserByTwitterHandle(twitterHandle: string): Promise<User | null> {
+  async getUserByAuthorId(authorId: string): Promise<User | null> {
     const client = await this.pool.connect();
     
     try {
       const result = await client.query(
-        'SELECT * FROM users WHERE twitter_handle = $1',
-        [twitterHandle]
+        'SELECT * FROM users WHERE author_id = $1',
+        [authorId]
       );
       
       return result.rows[0] || null;
@@ -102,42 +98,43 @@ class DatabaseService {
     }
   }
 
-  async createUser(twitterHandle: string): Promise<User> {
+  async createUser(authorId: string): Promise<User> {
     const client = await this.pool.connect();
     
     try {
       const result = await client.query(
-        'INSERT INTO users (twitter_handle) VALUES ($1) RETURNING *',
-        [twitterHandle]
+        'INSERT INTO users (author_id) VALUES ($1) RETURNING *',
+        [authorId]
       );
       
-      logger.info('Created new user', { twitterHandle, userId: result.rows[0].id });
+      logger.info('Created new user', { authorId, userId: result.rows[0].id });
       return result.rows[0];
     } finally {
       client.release();
     }
   }
 
-  async getOrCreateUser(twitterHandle: string): Promise<User> {
-    const existingUser = await this.getUserByTwitterHandle(twitterHandle);
+  async getOrCreateUser(authorId: string): Promise<User> {
+    const existingUser = await this.getUserByAuthorId(authorId);
     if (existingUser) {
       return existingUser;
     }
-    return await this.createUser(twitterHandle);
+    return await this.createUser(authorId);
   }
 
   async logUsage(usageLog: Omit<UsageLog, 'id' | 'created_at'>): Promise<UsageLog> {
+    const user = await this.getOrCreateUser(usageLog.user_id);
     const client = await this.pool.connect();
     
     try {
       const result = await client.query(
         `INSERT INTO usage_logs (user_id, tweet_id, event_type, arweave_id, error_message)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [usageLog.user_id, usageLog.tweet_id, usageLog.event_type, usageLog.arweave_id, usageLog.error_message]
+        [user.id, usageLog.tweet_id, usageLog.event_type, usageLog.arweave_id, usageLog.error_message]
       );
       
       logger.info('Logged usage', { 
-        userId: usageLog.user_id, 
+        userId: user.id, 
         tweetId: usageLog.tweet_id, 
         eventType: usageLog.event_type 
       });
@@ -148,13 +145,14 @@ class DatabaseService {
     }
   }
 
-  async getUserQuota(userId: string): Promise<UserQuota | null> {
+  async getUserQuota(authorId: string): Promise<UserQuota | null> {
+    const user = await this.getOrCreateUser(authorId);
     const client = await this.pool.connect();
     
     try {
       const result = await client.query(
         'SELECT * FROM user_quotas WHERE user_id = $1',
-        [userId]
+        [user.id]
       );
       
       return result.rows[0] || null;
@@ -163,7 +161,8 @@ class DatabaseService {
     }
   }
 
-  async createOrUpdateUserQuota(userId: string): Promise<UserQuota> {
+  async createOrUpdateUserQuota(authorId: string): Promise<UserQuota> {
+    const user = await this.getOrCreateUser(authorId);
     const client = await this.pool.connect();
     
     try {
@@ -185,7 +184,7 @@ class DatabaseService {
            last_request_date = CURRENT_DATE,
            updated_at = NOW()
          RETURNING *`,
-        [userId]
+        [user.id]
       );
       
       return result.rows[0];

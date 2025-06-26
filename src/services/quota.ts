@@ -99,7 +99,7 @@ class QuotaService {
     monthly_remaining: number;
   }> {
     try {
-      const user = await databaseService.getUserByTwitterHandle(authorId);
+      const user = await databaseService.getUserByAuthorId(authorId);
       if (!user) {
         return {
           daily_used: 0,
@@ -109,7 +109,7 @@ class QuotaService {
         };
       }
 
-      const quota = await databaseService.getUserQuota(user.id);
+      const quota = await databaseService.getUserQuota(authorId);
       if (!quota) {
         return {
           daily_used: 0,
