@@ -147,7 +147,7 @@ class ArweaveService {
     authorId: string
   ): string {
     const arweaveUrl = this.generateArweaveUrl(arweaveId);
-    return `📸 Screenshot saved! \n\nTweet by user ${authorId} has been preserved on Arweave.\n\n🔗 View: ${arweaveUrl}\n\n#PermaSnap #Arweave`;
+    return `Tweet by user ${authorId} has been preserved on Arweave.\n\n🔗 View: ${arweaveUrl}\n\n#PermaSnap #Arweave`;
   }
 
   /**

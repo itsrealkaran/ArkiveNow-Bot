@@ -130,7 +130,7 @@ class BotService {
         arweave_id: uploadResult.id,
       });
       // Step 9: Reply with success message
-      await this.handleSuccess(mention, uploadResult.id, tweet.id, tweet.author_id);
+      await this.handleSuccess(mention, uploadResult.id, tweet.id, tweet.author_id, screenshotResult.buffer);
       logger.info('Successfully processed mention', {
         mentionId: mention.id,
         tweetId: tweet.id,
@@ -152,23 +152,31 @@ class BotService {
     mention: TwitterMention,
     arweaveId: string,
     tweetId: string,
-    authorId: string
+    authorId: string,
+    screenshotBuffer: Buffer
   ): Promise<void> {
     try {
       const message = arweaveService.generateUploadMessage(arweaveId, tweetId, authorId);
-      // Reply with the message
-      const replySuccess = await twitterService.replyToTweet(mention.id, message);
+      
+      // Save screenshot to temp file for Twitter upload
+      const tempFilename = `tweet-${tweetId}-${Date.now()}.jpg`;
+      const tempPath = await screenshotService.saveScreenshot(screenshotBuffer, tempFilename);
+      
+      // Reply with the message and screenshot image
+      const replySuccess = await twitterService.replyWithMedia(mention.id, message, tempPath);
+      
       if (replySuccess) {
-        logger.info('Success reply sent', { 
+        logger.info('Success reply with image sent', { 
           mentionId: mention.id, 
           arweaveId,
-          messageLength: message.length 
+          messageLength: message.length,
+          imageSize: screenshotBuffer.length
         });
       } else {
-        logger.error('Failed to send success reply', { mentionId: mention.id });
+        logger.error('Failed to send success reply with image', { mentionId: mention.id });
       }
     } catch (error) {
-      logger.error('Error sending success reply', { mentionId: mention.id, error });
+      logger.error('Error sending success reply with image', { mentionId: mention.id, error });
     }
   }
 
