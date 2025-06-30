@@ -1,37 +1,27 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
-import sharp from 'sharp';
-import { writeFile, unlink } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
-import { ScreenshotResult, ScreenshotOptions, TwitterTweet, TwitterUser } from '../types';
+import { createCanvas, CanvasRenderingContext2D, registerFont } from 'canvas';
+import { ScreenshotResult, ScreenshotOptions, TwitterTweet } from '../types';
 import { botConfig } from '../config';
 import logger from '../utils/logger';
 
-class ScreenshotService {
-  private browser: Browser | null = null;
+// Add type declaration for roundRect if it doesn't exist
+declare global {
+  interface CanvasRenderingContext2D {
+    roundRect(x: number, y: number, width: number, height: number, radius: number): void;
+  }
+}
 
+class ScreenshotService {
   constructor() {
     logger.info('Screenshot service initialized');
   }
 
   async initialize(): Promise<void> {
     try {
-      this.browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-        ],
-      });
-
-      logger.info('✅ Puppeteer browser initialized successfully');
+      // Register fonts if needed (optional)
+      // registerFont('path/to/font.ttf', { family: 'CustomFont' });
+      logger.info('✅ Canvas-based screenshot service initialized successfully');
     } catch (error) {
-      logger.error('❌ Failed to initialize Puppeteer browser', { error });
+      logger.error('❌ Failed to initialize screenshot service', { error });
       throw error;
     }
   }
@@ -40,54 +30,37 @@ class ScreenshotService {
     tweet: TwitterTweet,
     options: ScreenshotOptions = {}
   ): Promise<ScreenshotResult> {
-    if (!this.browser) {
-      return { success: false, error: 'Browser not initialized' };
-    }
-
-    let page: Page | null = null;
-
     try {
-      page = await this.browser.newPage();
-      
-      // Set viewport
       const width = options.width || 600;
       const height = options.height || 400;
-      await page.setViewport({ width, height });
 
-      // Generate HTML for the tweet
-      const html = this.generateTweetHTML(tweet);
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      // Create canvas
+      const canvas = createCanvas(width, height);
+      const ctx = canvas.getContext('2d');
 
-      // Take screenshot
-      const screenshot = await page.screenshot({
-        type: 'png',
-        fullPage: false,
-        omitBackground: false,
-      });
+      // Draw tweet card
+      this.drawTweetCard(ctx, tweet, width, height);
 
-      // Compress and optimize the image
-      const compressedBuffer = await this.compressImage(screenshot as Buffer, options);
+      // Get image buffer
+      const buffer = canvas.toBuffer('image/jpeg', { quality: 0.9 });
 
       // Check file size
-      const fileSizeKB = compressedBuffer.length / 1024;
+      const fileSizeKB = buffer.length / 1024;
       if (fileSizeKB > botConfig.maxImageSizeKB) {
-        logger.warn('Screenshot too large, attempting further compression', {
+        logger.warn('Image too large, attempting compression', {
           originalSize: fileSizeKB,
           maxSize: botConfig.maxImageSizeKB,
         });
         
-        // Try more aggressive compression
-        const furtherCompressed = await this.compressImage(compressedBuffer, {
-          ...options,
-          quality: Math.max(50, (options.quality || 80) - 20),
+        // Try with lower quality
+        const compressedBuffer = canvas.toBuffer('image/jpeg', { 
+          quality: Math.max(0.5, 0.9 - (fileSizeKB - botConfig.maxImageSizeKB) / 100) 
         });
         
-        const newSizeKB = furtherCompressed.length / 1024;
+        const newSizeKB = compressedBuffer.length / 1024;
         if (newSizeKB <= botConfig.maxImageSizeKB) {
-          logger.info('Successfully compressed image to acceptable size', {
-            finalSize: newSizeKB,
-          });
-          return { success: true, buffer: furtherCompressed };
+          logger.info('Successfully compressed image', { finalSize: newSizeKB });
+          return { success: true, buffer: compressedBuffer };
         } else {
           return { 
             success: false, 
@@ -96,154 +69,132 @@ class ScreenshotService {
         }
       }
 
-      logger.info('Screenshot taken successfully', {
+      logger.info('Tweet image generated successfully', {
         tweetId: tweet.id,
         fileSize: fileSizeKB.toFixed(2) + 'KB',
         dimensions: `${width}x${height}`,
       });
 
-      return { success: true, buffer: compressedBuffer };
+      return { success: true, buffer };
 
     } catch (error) {
-      logger.error('Failed to take screenshot', { tweetId: tweet.id, error });
-      return { success: false, error: error instanceof Error ? error.message : 'Screenshot failed' };
-    } finally {
-      if (page) {
-        await page.close();
-      }
+      logger.error('Failed to generate tweet image', { tweetId: tweet.id, error });
+      return { success: false, error: error instanceof Error ? error.message : 'Image generation failed' };
     }
   }
 
-  private generateTweetHTML(tweet: TwitterTweet): string {
-    const displayName = tweet.author_id;
-    const tweetText = this.escapeHtml(tweet.text);
+  private drawTweetCard(ctx: CanvasRenderingContext2D, tweet: TwitterTweet, width: number, height: number): void {
+    // Background
+    ctx.fillStyle = '#f4f6fb';
+    ctx.fillRect(0, 0, width, height);
+
+    // Card background
+    const cardWidth = width * 0.85;
+    const cardHeight = height * 0.8;
+    const cardX = (width - cardWidth) / 2;
+    const cardY = (height - cardHeight) / 2;
+
+    // Card shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+    ctx.shadowBlur = 20;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 4;
+
+    // Card background with rounded corners
+    ctx.fillStyle = '#ffffff';
+    this.drawRoundedRect(ctx, cardX, cardY, cardWidth, cardHeight, 18);
+    ctx.fill();
+
+    // Reset shadow
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Padding
+    const padding = 24;
+    const contentX = cardX + padding;
+    const contentY = cardY + padding;
+    const contentWidth = cardWidth - (padding * 2);
+
+    // Author name
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(tweet.author_id, contentX, contentY + 20);
+
+    // Tweet text
+    ctx.fillStyle = '#222222';
+    ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    
+    const words = tweet.text.split(' ');
+    let line = '';
+    let y = contentY + 50;
+    const maxWidth = contentWidth - 20;
+
+    for (const word of words) {
+      const testLine = line + word + ' ';
+      const metrics = ctx.measureText(testLine);
+      
+      if (metrics.width > maxWidth && line !== '') {
+        ctx.fillText(line, contentX, y);
+        line = word + ' ';
+        y += 24;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, contentX, y);
+
+    // Date
     const tweetDate = new Date(tweet.created_at).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     });
+    
+    ctx.fillStyle = '#8a99a8';
+    ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(tweetDate, contentX, y + 30);
 
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Tweet Screenshot</title>
-        <style>
-          body {
-            background: #f4f6fb;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .tweet-card {
-            background: #fff;
-            border-radius: 18px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.07), 0 1.5px 4px rgba(0,0,0,0.03);
-            max-width: 520px;
-            width: 100%;
-            padding: 32px 28px 24px 28px;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-          }
-          .tweet-author {
-            font-weight: 700;
-            font-size: 1.1rem;
-            color: #1a1a1a;
-            margin-bottom: 8px;
-            letter-spacing: 0.01em;
-          }
-          .tweet-text {
-            font-size: 1.35rem;
-            color: #222;
-            margin-bottom: 18px;
-            line-height: 1.6;
-            word-break: break-word;
-          }
-          .tweet-date {
-            color: #8a99a8;
-            font-size: 0.98rem;
-            margin-bottom: 8px;
-          }
-          .tweet-id {
-            color: #c0c7d1;
-            font-size: 0.85rem;
-            margin-bottom: 8px;
-          }
-          .badge {
-            position: absolute;
-            bottom: 12px;
-            right: 18px;
-            background: #e6f0fa;
-            color: #1a7fd7;
-            font-size: 0.92rem;
-            padding: 3px 12px;
-            border-radius: 12px;
-            font-weight: 600;
-            letter-spacing: 0.03em;
-            box-shadow: 0 1px 3px rgba(26,127,215,0.07);
-          }
-        </style>
-      </head>
-      <body>
-        <div class="tweet-card">
-          <div class="tweet-author">${this.escapeHtml(displayName)}</div>
-          <div class="tweet-text">${tweetText}</div>
-          <div class="tweet-date">${tweetDate}</div>
-          <div class="tweet-id">ID: ${tweet.id}</div>
-          <div class="badge">PermaSnap</div>
-        </div>
-      </body>
-      </html>
-    `;
+    // Tweet ID
+    ctx.fillStyle = '#c0c7d1';
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(`ID: ${tweet.id}`, contentX, y + 50);
+
+    // PermaSnap badge
+    const badgeX = cardX + cardWidth - padding - 80;
+    const badgeY = cardY + cardHeight - padding - 30;
+    
+    ctx.fillStyle = '#e6f0fa';
+    this.drawRoundedRect(ctx, badgeX, badgeY, 80, 24, 12);
+    ctx.fill();
+    
+    ctx.fillStyle = '#1a7fd7';
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PermaSnap', badgeX + 40, badgeY + 16);
+    ctx.textAlign = 'left';
   }
 
-  private async compressImage(buffer: Buffer, options: ScreenshotOptions): Promise<Buffer> {
-    const quality = options.quality || 80;
-    const format = options.format || 'jpeg';
-
-    try {
-      let sharpInstance = sharp(buffer);
-
-      // Resize if needed
-      if (options.width || options.height) {
-        sharpInstance = sharpInstance.resize(options.width, options.height, {
-          fit: 'inside',
-          withoutEnlargement: true,
-        });
-      }
-
-      // Compress based on format
-      switch (format) {
-        case 'jpeg':
-          return await sharpInstance.jpeg({ quality }).toBuffer();
-        case 'png':
-          return await sharpInstance.png({ quality }).toBuffer();
-        case 'webp':
-          return await sharpInstance.webp({ quality }).toBuffer();
-        default:
-          return await sharpInstance.jpeg({ quality }).toBuffer();
-      }
-    } catch (error) {
-      logger.error('Failed to compress image', { error });
-      return buffer; // Return original if compression fails
-    }
-  }
-
-  private escapeHtml(text: string): string {
-    // Simple HTML escaping for Node.js environment
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+  private drawRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
   }
 
   async saveScreenshot(buffer: Buffer, filename: string): Promise<string> {
+    const { writeFile } = await import('fs/promises');
+    const { join } = await import('path');
+    const { tmpdir } = await import('os');
+    
     const tempPath = join(tmpdir(), filename);
     await writeFile(tempPath, buffer);
     logger.info('Screenshot saved to temp file', { tempPath, size: buffer.length });
@@ -251,28 +202,13 @@ class ScreenshotService {
   }
 
   async cleanup(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      logger.info('Screenshot service browser closed');
-    }
+    // No browser cleanup needed with canvas
+    logger.info('Screenshot service cleanup completed');
   }
 
   async checkBrowserHealth(): Promise<boolean> {
-    try {
-      if (!this.browser) {
-        return false;
-      }
-
-      // Try to create a new page to test browser health
-      const page = await this.browser.newPage();
-      await page.close();
-      
-      return true;
-    } catch (error) {
-      logger.error('Browser health check failed', { error });
-      return false;
-    }
+    // Canvas doesn't need health checks like a browser
+    return true;
   }
 }
 
