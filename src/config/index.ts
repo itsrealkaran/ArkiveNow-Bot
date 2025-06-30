@@ -22,7 +22,7 @@ const envSchema = z.object({
   
   // Bot Configuration
   BOT_USERNAME: z.string().min(1),
-  POLLING_INTERVAL: z.string().transform(Number).pipe(z.number().positive()).default('900000'),
+  POLLING_INTERVAL: z.string().transform(Number).pipe(z.number().positive()).default('910000'),
   MAX_DAILY_REQUESTS: z.string().transform(Number).pipe(z.number().positive()).default('10'),
   MAX_MONTHLY_REQUESTS: z.string().transform(Number).pipe(z.number().positive()).default('100'),
   MAX_IMAGE_SIZE_KB: z.string().transform(Number).pipe(z.number().positive()).default('100'),

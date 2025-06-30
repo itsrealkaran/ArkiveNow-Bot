@@ -21,72 +21,94 @@ class BotService {
     logger.info('🚀 Starting bot service...');
 
     // Start polling for mentions
-    await twitterService.startPolling(async (mention) => {
-      await this.processMention(mention);
+    await twitterService.startPolling(async (mentions) => {
+      await this.processMentionsBatch(mentions);
     });
 
     logger.info('✅ Bot service started successfully');
   }
 
   /**
-   * Process a single mention
+   * Process a batch of mentions
    */
-  async processMention(mention: TwitterMention): Promise<void> {
+  async processMentionsBatch(mentions: TwitterMention[]): Promise<void> {
+    // Step 1: Collect all relevant tweet IDs
+    const mentionToTweetId: { [mentionId: string]: string } = {};
+    for (const mention of mentions) {
+      if (!mention.id) continue; // skip if mention.id is undefined
+      let tweetId = twitterService.extractParentTweetId(mention);
+      if (!tweetId) {
+        const parsed = TweetParser.parseMention(mention);
+        tweetId = parsed.tweetId || '';
+      }
+      if (tweetId && tweetId !== '') {
+        mentionToTweetId[mention.id] = tweetId;
+      }
+    }
+    const uniqueTweetIds = Array.from(new Set(Object.values(mentionToTweetId)));
+    if (!uniqueTweetIds.length) {
+      logger.warn('No valid tweet references found in batch');
+      return;
+    }
+
+    // Step 2: Batch fetch tweets
+    const tweets = await twitterService.getTweetsByIds(uniqueTweetIds);
+    console.log('tweets:', tweets);
+    logger.info('Batch fetched tweets', { tweetIds: uniqueTweetIds, tweets });
+    const tweetMap = new Map(tweets.map(tweet => [tweet.id, tweet]));
+
+    // Step 3: Process each mention with its corresponding tweet
+    for (const mention of mentions) {
+      const tweetId = mentionToTweetId[mention.id];
+      if (!tweetId || tweetId === '') {
+        logger.warn('No tweetId found for mention', { mentionId: mention.id });
+        await this.handleInvalidRequest(mention, { tweetId: null, type: 'invalid', originalText: mention.text });
+        continue;
+      }
+      const tweet = tweetMap.get(tweetId);
+      if (!tweet) {
+        logger.warn('Tweet not found for mention', { mentionId: mention.id, tweetId });
+        await this.handleInvalidRequest(mention, { tweetId: null, type: 'invalid', originalText: mention.text });
+        continue;
+      }
+      await this.processMentionWithTweet(mention, tweet);
+    }
+  }
+
+  /**
+   * Process a single mention with its tweet (refactored from processMention)
+   */
+  async processMentionWithTweet(mention: TwitterMention, tweet: TwitterTweet): Promise<void> {
     if (this.isProcessing) {
       logger.info('Bot is already processing a mention, skipping', { mentionId: mention.id });
       return;
     }
-
     this.isProcessing = true;
-
     try {
-      logger.info('Processing mention', { 
-        mentionId: mention.id, 
+      logger.info('Processing mention', {
+        mentionId: mention.id,
         authorId: mention.author_id,
-        text: mention.text
+        text: mention.text,
+        tweetId: tweet.id
       });
-
-      // Step 1: Extract the target tweet ID (parent tweet or referenced tweet)
-      let targetTweetId = twitterService.extractParentTweetId(mention);
-      if (!targetTweetId) {
-        // Fallback: Try to extract from mention text (URL, quoted, ID, etc.)
-        const parsed = TweetParser.parseMention(mention);
-        targetTweetId = parsed.tweetId;
-      }
-      if (!targetTweetId) {
-        logger.warn('No valid tweet reference found in mention', { mentionId: mention.id, text: mention.text });
-        await this.handleInvalidRequest(mention, { tweetId: null, type: 'invalid', originalText: mention.text });
-        return;
-      }
-
       // Step 2: Check user quota using author_id
       const quotaCheck = await quotaService.checkUserQuota(mention.author_id);
       if (!quotaCheck.allowed) {
         await this.handleQuotaExceeded(mention, mention.author_id, quotaCheck);
         return;
       }
-
-      // Step 3: Get the target tweet
-      const tweet = await twitterService.getTweet(targetTweetId);
-      if (!tweet) {
-        await this.handleError(mention, 'Could not find the tweet to screenshot');
-        return;
-      }
-
       // Step 4: Check if tweet is public
       const isPublic = await twitterService.isPublicTweet(tweet);
       if (!isPublic) {
         await this.handleError(mention, 'Cannot screenshot private tweets');
         return;
       }
-
       // Step 5: Take screenshot (no author lookup)
       const screenshotResult = await screenshotService.takeScreenshot(tweet, {});
       if (!screenshotResult.success || !screenshotResult.buffer) {
         await this.handleError(mention, `Screenshot failed: ${screenshotResult.error}`);
         return;
       }
-
       // Step 6: Upload to Arweave
       const uploadResult = await arweaveService.uploadScreenshot(
         screenshotResult,
@@ -94,15 +116,12 @@ class BotService {
         tweet.author_id,
         tweet.text
       );
-
       if (!uploadResult.success || !uploadResult.id) {
         await this.handleError(mention, `Upload failed: ${uploadResult.error}`);
         return;
       }
-
       // Step 7: Increment user quota using author_id
       await quotaService.incrementUserQuota(mention.author_id);
-
       // Step 8: Log successful usage
       await databaseService.logUsage({
         user_id: mention.author_id,
@@ -110,17 +129,14 @@ class BotService {
         event_type: 'success',
         arweave_id: uploadResult.id,
       });
-
       // Step 9: Reply with success message
       await this.handleSuccess(mention, uploadResult.id, tweet.id, tweet.author_id);
-
       logger.info('Successfully processed mention', {
         mentionId: mention.id,
         tweetId: tweet.id,
         arweaveId: uploadResult.id,
         requester: mention.author_id,
       });
-
     } catch (error) {
       logger.error('Error processing mention', { mentionId: mention.id, error });
       await this.handleError(mention, 'An unexpected error occurred while processing your request');

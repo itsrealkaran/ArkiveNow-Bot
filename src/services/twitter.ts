@@ -333,7 +333,7 @@ class TwitterService {
     }
   }
 
-  async startPolling(callback: (mention: TwitterMention) => Promise<void>): Promise<void> {
+  async startPolling(callback: (mentions: TwitterMention[]) => Promise<void>): Promise<void> {
     logger.info('Starting Twitter mention polling', { 
       interval: botConfig.pollingInterval,
       botUsername: botConfig.username 
@@ -342,11 +342,9 @@ class TwitterService {
     const poll = async () => {
       try {
         const mentions = await this.getMentions();
-        
-        // Process mentions in reverse order (oldest first)
-        for (const mention of mentions.reverse()) {
-          await callback(mention);
-        }
+        console.log('mentions:', mentions);
+        // Pass all mentions at once for batch processing
+        await callback(mentions.reverse());
       } catch (error) {
         logger.error('Error in polling cycle', { error });
       }
@@ -374,6 +372,42 @@ class TwitterService {
       return repliedTo ? repliedTo.id : null;
     }
     return null;
+  }
+
+  /**
+   * Batch fetch tweets by IDs (up to 100 per request)
+   */
+  async getTweetsByIds(tweetIds: string[]): Promise<TwitterTweet[]> {
+    if (!tweetIds.length) return [];
+    return this.makeRateLimitedRequest(async () => {
+      try {
+        const response = await this.client.v2.tweets(tweetIds, {
+          'tweet.fields': ['created_at', 'author_id', 'public_metrics'],
+          'user.fields': ['username', 'name'],
+          expansions: ['author_id'],
+        });
+        logger.info('Batch tweet fetch response', { tweetIds, response: response.data });
+        if (!response.data) return [];
+        return response.data.map((tweet: any) => {
+          const metrics = tweet.public_metrics || {};
+          return {
+            id: tweet.id,
+            text: tweet.text,
+            author_id: tweet.author_id,
+            created_at: tweet.created_at || new Date().toISOString(),
+            public_metrics: {
+              retweet_count: typeof metrics.retweet_count === 'number' ? metrics.retweet_count : 0,
+              reply_count: typeof metrics.reply_count === 'number' ? metrics.reply_count : 0,
+              like_count: typeof metrics.like_count === 'number' ? metrics.like_count : 0,
+              quote_count: typeof metrics.quote_count === 'number' ? metrics.quote_count : 0,
+            },
+          };
+        });
+      } catch (error) {
+        logger.error('Failed to batch fetch tweets', { tweetIds, error });
+        return [];
+      }
+    });
   }
 }
 
