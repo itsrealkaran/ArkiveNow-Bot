@@ -9,6 +9,7 @@ export interface TwitterMention {
     type: 'replied_to' | 'retweeted' | 'quoted';
     id: string;
   }>;
+  author?: TwitterUser;
 }
 
 export interface TwitterUser {
@@ -16,6 +17,17 @@ export interface TwitterUser {
   username: string;
   name: string;
   profile_image_url?: string;
+  verified?: boolean;
+}
+
+export interface TwitterMedia {
+  media_key: string;
+  type: 'photo' | 'video' | 'animated_gif';
+  url?: string;
+  preview_image_url?: string;
+  width?: number;
+  height?: number;
+  alt_text?: string;
 }
 
 export interface TwitterTweet {
@@ -29,6 +41,8 @@ export interface TwitterTweet {
     like_count: number;
     quote_count: number;
   };
+  author?: TwitterUser;
+  media?: TwitterMedia[];
 }
 
 // Database Types

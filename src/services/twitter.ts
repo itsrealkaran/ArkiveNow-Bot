@@ -1,7 +1,7 @@
 import { TwitterApi } from 'twitter-api-v2';
 import { twitterConfig, botConfig } from '../config';
 import logger from '../utils/logger';
-import { TwitterMention, TwitterTweet, TwitterUser } from '../types';
+import { TwitterMention, TwitterTweet, TwitterUser, TwitterMedia } from '../types';
 
 class TwitterService {
   private client: TwitterApi;
@@ -126,9 +126,9 @@ class TwitterService {
 
       const params: any = {
         max_results: 10,
-        'tweet.fields': ['created_at', 'author_id', 'in_reply_to_user_id', 'referenced_tweets'],
-        'user.fields': ['username', 'name'],
-        expansions: ['author_id', 'referenced_tweets.id'],
+        'tweet.fields': ['created_at', 'author_id', 'in_reply_to_user_id', 'referenced_tweets', 'public_metrics'],
+        'user.fields': ['username', 'name', 'profile_image_url', 'verified'],
+        expansions: ['author_id', 'referenced_tweets.id', 'referenced_tweets.id.author_id'],
       };
 
       // Only add since_id if we have a last mention ID
@@ -145,25 +145,65 @@ class TwitterService {
         const mentions = await this.client.v2.userMentionTimeline(botUserId, params);
         // Extract mentions from paginator's _realData.data
         const mentionsData: any[] = (mentions as any)._realData?.data || [];
+        const usersData: any[] = (mentions as any)._realData?.includes?.users || [];
 
         logger.info('Raw API response received:', {
           hasData: mentionsData.length > 0,
           processedLength: mentionsData.length,
+          usersCount: usersData.length,
           isArray: Array.isArray(mentionsData),
           firstItem: mentionsData.length > 0 ? typeof mentionsData[0] : 'none',
           meta: (mentions as any)._realData?.meta || 'none',
           fullResponseKeys: Object.keys(mentions)
         });
 
-        if (mentionsData.length > 0) {
+        // Create a map of users for quick lookup
+        const usersMap = new Map<string, TwitterUser>();
+        usersData.forEach((user: any) => {
+          usersMap.set(user.id, {
+            id: user.id,
+            username: user.username,
+            name: user.name,
+            profile_image_url: user.profile_image_url,
+          });
+        });
+
+        // Map mentions with user information
+        const mentionsWithUsers = mentionsData.map((mention: any) => {
+          const author = usersMap.get(mention.author_id);
+          const mentionData: TwitterMention = {
+            id: mention.id,
+            text: mention.text,
+            author_id: mention.author_id,
+            created_at: mention.created_at,
+            in_reply_to_user_id: mention.in_reply_to_user_id,
+            referenced_tweets: mention.referenced_tweets,
+          };
+          
+          // Only add author if it exists
+          if (author && author.id) {
+            mentionData.author = author;
+          }
+          
+          return mentionData;
+        });
+
+        if (mentionsWithUsers.length > 0) {
           // Update last mention ID for next poll
-          this.lastMentionId = mentionsData[0].id;
-          logger.info('Found new mentions', { count: mentionsData.length, latestId: this.lastMentionId });
+          const firstMention = mentionsWithUsers[0];
+          if (firstMention && firstMention.id) {
+            this.lastMentionId = firstMention.id;
+          }
+          logger.info('Found new mentions', { 
+            count: mentionsWithUsers.length, 
+            latestId: this.lastMentionId,
+            usersWithInfo: mentionsWithUsers.filter(m => m.author).length
+          });
         } else {
           logger.info('No mentions data in response or empty array');
         }
 
-        return mentionsData;
+        return mentionsWithUsers;
       } catch (error) {
         logger.error('Error in userMentionTimeline API call:', {
           error: error instanceof Error ? error.message : error,
@@ -179,9 +219,10 @@ class TwitterService {
     return this.makeRateLimitedRequest(async () => {
       try {
         const tweet = await this.client.v2.singleTweet(tweetId, {
-          'tweet.fields': ['created_at', 'author_id', 'public_metrics'],
-          'user.fields': ['username', 'name'],
-          expansions: ['author_id'],
+          'tweet.fields': ['created_at', 'author_id', 'public_metrics', 'referenced_tweets', 'attachments'],
+          'user.fields': ['username', 'name', 'profile_image_url', 'verified'],
+          'media.fields': ['url', 'preview_image_url', 'type', 'width', 'height', 'alt_text'],
+          expansions: ['author_id', 'attachments.media_keys', 'referenced_tweets.id'],
         });
 
         if (!tweet.data) {
@@ -212,10 +253,49 @@ class TwitterService {
           };
         }
 
+        // Add author information if available
+        if (tweet.includes?.users && tweet.includes.users.length > 0) {
+          const user = tweet.includes.users[0];
+          if (user && user.id === tweet.data.author_id) {
+            const author: TwitterUser = {
+              id: user.id,
+              username: user.username,
+              name: user.name,
+            };
+            
+            // Only add profile_image_url if it exists
+            if (user.profile_image_url) {
+              author.profile_image_url = user.profile_image_url;
+            }
+            
+            // Add verified status if available
+            if (user.verified !== undefined) {
+              author.verified = user.verified;
+            }
+            
+            twitterTweet.author = author;
+          }
+        }
+
+        // Add media information if available
+        if (tweet.includes?.media && tweet.includes.media.length > 0) {
+          const mediaData: any[] = tweet.includes.media;
+          twitterTweet.media = mediaData.map((media: any) => ({
+            media_key: media.media_key,
+            type: media.type,
+            url: media.url,
+            preview_image_url: media.preview_image_url,
+            width: media.width,
+            height: media.height,
+            alt_text: media.alt_text,
+          }));
+        }
+
         logger.info('Retrieved tweet', { 
           tweetId, 
           authorId: twitterTweet.author_id,
-          textLength: twitterTweet.text.length 
+          textLength: twitterTweet.text.length,
+          hasAuthorInfo: !!twitterTweet.author
         });
 
         return twitterTweet;
@@ -382,15 +462,49 @@ class TwitterService {
     return this.makeRateLimitedRequest(async () => {
       try {
         const response = await this.client.v2.tweets(tweetIds, {
-          'tweet.fields': ['created_at', 'author_id', 'public_metrics'],
-          'user.fields': ['username', 'name'],
-          expansions: ['author_id'],
+          'tweet.fields': ['created_at', 'author_id', 'public_metrics', 'referenced_tweets', 'attachments'],
+          'user.fields': ['username', 'name', 'profile_image_url', 'verified'],
+          'media.fields': ['url', 'preview_image_url', 'type', 'width', 'height', 'alt_text'],
+          expansions: ['author_id', 'attachments.media_keys', 'referenced_tweets.id'],
         });
         logger.info('Batch tweet fetch response', { tweetIds, response: response.data });
         if (!response.data) return [];
+        
+        // Extract users data
+        const usersData: any[] = response.includes?.users || [];
+        const usersMap = new Map<string, TwitterUser>();
+        
+        usersData.forEach((user: any) => {
+          usersMap.set(user.id, {
+            id: user.id,
+            username: user.username,
+            name: user.name,
+            profile_image_url: user.profile_image_url,
+            verified: user.verified,
+          });
+        });
+        
+        // Extract media data
+        const mediaData: any[] = response.includes?.media || [];
+        const mediaMap = new Map<string, TwitterMedia>();
+        
+        mediaData.forEach((media: any) => {
+          mediaMap.set(media.media_key, {
+            media_key: media.media_key,
+            type: media.type,
+            url: media.url,
+            preview_image_url: media.preview_image_url,
+            width: media.width,
+            height: media.height,
+            alt_text: media.alt_text,
+          });
+        });
+        
         return response.data.map((tweet: any) => {
           const metrics = tweet.public_metrics || {};
-          return {
+          const author = usersMap.get(tweet.author_id);
+          
+          const twitterTweet: TwitterTweet = {
             id: tweet.id,
             text: tweet.text,
             author_id: tweet.author_id,
@@ -402,6 +516,21 @@ class TwitterService {
               quote_count: typeof metrics.quote_count === 'number' ? metrics.quote_count : 0,
             },
           };
+          
+          // Only add author if it exists
+          if (author && author.id) {
+            twitterTweet.author = author;
+          }
+          
+          // Add media if available
+          if (tweet.attachments?.media_keys && mediaMap.size > 0) {
+            const mediaKeys = tweet.attachments.media_keys;
+            twitterTweet.media = mediaKeys
+              .map((key: string) => mediaMap.get(key))
+              .filter((media: TwitterMedia | undefined): media is TwitterMedia => media !== undefined);
+          }
+          
+          return twitterTweet;
         });
       } catch (error) {
         logger.error('Failed to batch fetch tweets', { tweetIds, error });
