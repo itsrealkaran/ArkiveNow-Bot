@@ -40,6 +40,10 @@ class DatabaseService {
         CREATE TABLE IF NOT EXISTS users (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           author_id VARCHAR(32) UNIQUE NOT NULL,
+          username VARCHAR,
+          name VARCHAR,
+          profile_image_url VARCHAR,
+          verified BOOLEAN,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
@@ -253,6 +257,40 @@ class DatabaseService {
       });
       
       return allTablesExist;
+    } finally {
+      client.release();
+    }
+  }
+
+  async upsertUserByAuthorId(user: {
+    author_id: string;
+    username?: string;
+    name?: string;
+    profile_image_url?: string;
+    verified?: boolean;
+  }): Promise<User> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `INSERT INTO users (author_id, username, name, profile_image_url, verified, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+         ON CONFLICT (author_id) DO UPDATE SET
+           username = EXCLUDED.username,
+           name = EXCLUDED.name,
+           profile_image_url = EXCLUDED.profile_image_url,
+           verified = EXCLUDED.verified,
+           updated_at = NOW()
+         RETURNING *`,
+        [
+          user.author_id,
+          user.username || null,
+          user.name || null,
+          user.profile_image_url || null,
+          user.verified ?? null
+        ]
+      );
+      logger.info('Upserted user', { authorId: user.author_id, userId: result.rows[0].id });
+      return result.rows[0];
     } finally {
       client.release();
     }

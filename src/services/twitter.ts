@@ -125,7 +125,7 @@ class TwitterService {
       logger.info('Getting mentions for bot user', { botUserId, botUsername: botConfig.username });
 
       const params: any = {
-        max_results: 10,
+        max_results: 100,
         'tweet.fields': ['created_at', 'author_id', 'in_reply_to_user_id', 'referenced_tweets', 'public_metrics'],
         'user.fields': ['username', 'name', 'profile_image_url', 'verified'],
         expansions: ['author_id', 'referenced_tweets.id', 'referenced_tweets.id.author_id'],
@@ -467,6 +467,12 @@ class TwitterService {
           'media.fields': ['url', 'preview_image_url', 'type', 'width', 'height', 'alt_text'],
           expansions: ['author_id', 'attachments.media_keys', 'referenced_tweets.id'],
         });
+        // response.includes?.media is an array (not an object), so console.log will work and print the array or undefined.
+        if (Array.isArray(response.includes?.media)) {
+          console.log("fetched tweet media array, length:", response.includes.media.length, response.includes.media);
+        } else {
+          console.log("fetched tweet media is not an array:", response.includes?.media);
+        }
         logger.info('Batch tweet fetch response', { tweetIds, response: response.data });
         if (!response.data) return [];
         

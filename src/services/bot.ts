@@ -36,6 +36,15 @@ class BotService {
     const mentionToTweetId: { [mentionId: string]: string } = {};
     for (const mention of mentions) {
       if (!mention.id) continue; // skip if mention.id is undefined
+      // Upsert user info in DB if author info is available
+      if (mention.author) {
+        const userUpsert: any = { author_id: mention.author.id };
+        if (mention.author.username !== undefined) userUpsert.username = mention.author.username;
+        if (mention.author.name !== undefined) userUpsert.name = mention.author.name;
+        if (mention.author.profile_image_url !== undefined) userUpsert.profile_image_url = mention.author.profile_image_url;
+        if (mention.author.verified !== undefined) userUpsert.verified = mention.author.verified;
+        await databaseService.upsertUserByAuthorId(userUpsert);
+      }
       let tweetId = twitterService.extractParentTweetId(mention);
       if (!tweetId) {
         const parsed = TweetParser.parseMention(mention);
@@ -130,7 +139,7 @@ class BotService {
         arweave_id: uploadResult.id,
       });
       // Step 9: Reply with success message
-      await this.handleSuccess(mention, uploadResult.id, tweet.id, tweet.author_id, screenshotResult.buffer);
+      // await this.handleSuccess(mention, uploadResult.id, tweet.id, tweet.author_id, screenshotResult.buffer);
       logger.info('Successfully processed mention', {
         mentionId: mention.id,
         tweetId: tweet.id,

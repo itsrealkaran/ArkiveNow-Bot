@@ -18,7 +18,7 @@ interface MediaItem {
 }
 
 class ScreenshotService {
-  private readonly CARD_WIDTH = 600;
+  private readonly CARD_WIDTH = 612;
   private readonly PADDING = 16;
   private readonly AVATAR_SIZE = 48;
   private readonly MEDIA_MAX_WIDTH = 520;
@@ -49,7 +49,7 @@ class ScreenshotService {
       const canvas = createCanvas(dimensions.width, dimensions.height);
       const ctx = canvas.getContext('2d');
 
-      // Render modern X tweet design
+      // Render modern X tweet design (await all async rendering)
       await this.renderModernTweet(ctx, tweet, dimensions);
 
       // Get image buffer with high quality
@@ -100,7 +100,7 @@ class ScreenshotService {
     ctx.font = '15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     
     // Calculate text height with word wrapping
-    const maxTextWidth = this.CARD_WIDTH - (this.PADDING * 2) - this.AVATAR_SIZE - 12;
+    const maxTextWidth = this.CARD_WIDTH - (this.PADDING * 2) - this.AVATAR_SIZE - 12 - 12;
     const textLines = this.wrapText(ctx, tweet.text, maxTextWidth);
     const textHeight = textLines.length * 20; // 20px line height
     
@@ -188,7 +188,7 @@ class ScreenshotService {
     await this.renderHeader(ctx, tweet);
     
     // Content section
-    this.renderContent(ctx, tweet, dimensions);
+    await this.renderContent(ctx, tweet, dimensions);
     
     // Footer section
     this.renderFooter(ctx, tweet, dimensions);
@@ -281,10 +281,10 @@ class ScreenshotService {
     ctx.fill();
   }
 
-  private renderContent(ctx: CanvasRenderingContext2D, tweet: TwitterTweet, dimensions: TweetDimensions): void {
+  private async renderContent(ctx: CanvasRenderingContext2D, tweet: TwitterTweet, dimensions: TweetDimensions): Promise<void> {
     const contentY = this.PADDING + 60; // Header height
     const textX = this.PADDING + this.AVATAR_SIZE + 12;
-    const maxTextWidth = this.CARD_WIDTH - textX - this.PADDING;
+    const maxTextWidth = this.CARD_WIDTH - textX - this.PADDING - 12;
     
     // Tweet text
     ctx.fillStyle = '#ffffff';
@@ -300,11 +300,11 @@ class ScreenshotService {
     
     // Render media if available
     if (tweet.media && tweet.media.length > 0) {
-      this.renderMedia(ctx, tweet, lineY + 8); // Add 8px spacing after text
+      await this.renderMedia(ctx, tweet, lineY + 8); // Add 8px spacing after text
     }
   }
 
-  private renderMedia(ctx: CanvasRenderingContext2D, tweet: TwitterTweet, startY: number): void {
+  private async renderMedia(ctx: CanvasRenderingContext2D, tweet: TwitterTweet, startY: number): Promise<void> {
     if (!tweet.media || tweet.media.length === 0) return;
     
     const mediaCount = tweet.media.length;
@@ -318,19 +318,20 @@ class ScreenshotService {
       // Single media
       const media = mediaToRender[0];
       if (media) {
-        this.renderSingleMedia(ctx, media, mediaX, startY);
+        await this.renderSingleMedia(ctx, media, mediaX, startY);
       }
     } else if (mediaCount === 2) {
       // 2 media items side by side
       const mediaWidth = (this.MEDIA_MAX_WIDTH - mediaSpacing) / 2;
       const mediaHeight = this.MEDIA_MAX_HEIGHT / 2;
       
-      mediaToRender.forEach((media, index) => {
+      for (let index = 0; index < mediaToRender.length; index++) {
+        const media = mediaToRender[index];
         if (media) {
           const x = mediaX + (index * (mediaWidth + mediaSpacing));
-          this.renderMediaItem(ctx, media, x, startY, mediaWidth, mediaHeight);
+          await this.renderMediaItem(ctx, media, x, startY, mediaWidth, mediaHeight);
         }
-      });
+      }
     } else if (mediaCount === 3) {
       // 3 media items - 2 on top, 1 below
       const topWidth = (this.MEDIA_MAX_WIDTH - mediaSpacing) / 2;
@@ -340,90 +341,125 @@ class ScreenshotService {
       
       // Top left
       if (mediaToRender[0]) {
-        this.renderMediaItem(ctx, mediaToRender[0], mediaX, startY, topWidth, topHeight);
+        await this.renderMediaItem(ctx, mediaToRender[0], mediaX, startY, topWidth, topHeight);
       }
       // Top right
       if (mediaToRender[1]) {
-        this.renderMediaItem(ctx, mediaToRender[1], mediaX + topWidth + mediaSpacing, startY, topWidth, topHeight);
+        await this.renderMediaItem(ctx, mediaToRender[1], mediaX + topWidth + mediaSpacing, startY, topWidth, topHeight);
       }
       // Bottom
       if (mediaToRender[2]) {
-        this.renderMediaItem(ctx, mediaToRender[2], mediaX, startY + topHeight + mediaSpacing, bottomWidth, bottomHeight);
+        await this.renderMediaItem(ctx, mediaToRender[2], mediaX, startY + topHeight + mediaSpacing, bottomWidth, bottomHeight);
       }
     } else {
       // 4 or more media items in 2x2 grid
       const gridWidth = (this.MEDIA_MAX_WIDTH - mediaSpacing) / 2;
       const gridHeight = (this.MEDIA_MAX_HEIGHT - mediaSpacing) / 2;
       
-      mediaToRender.forEach((media, index) => {
+      for (let index = 0; index < mediaToRender.length; index++) {
+        const media = mediaToRender[index];
         if (media) {
           const row = Math.floor(index / 2);
           const col = index % 2;
           const x = mediaX + (col * (gridWidth + mediaSpacing));
           const y = startY + (row * (gridHeight + mediaSpacing));
-          this.renderMediaItem(ctx, media, x, y, gridWidth, gridHeight);
+          await this.renderMediaItem(ctx, media, x, y, gridWidth, gridHeight);
         }
-      });
+      }
     }
   }
 
-  private renderSingleMedia(ctx: CanvasRenderingContext2D, media: any, x: number, y: number): void {
+  private async renderSingleMedia(ctx: CanvasRenderingContext2D, media: any, x: number, y: number): Promise<void> {
     const aspectRatio = media.width && media.height ? media.width / media.height : 16 / 9;
     const mediaHeight = Math.min(this.MEDIA_MAX_HEIGHT, this.MEDIA_MAX_WIDTH / aspectRatio);
-    this.renderMediaItem(ctx, media, x, y, this.MEDIA_MAX_WIDTH, mediaHeight);
+    await this.renderMediaItem(ctx, media, x, y, this.MEDIA_MAX_WIDTH, mediaHeight);
   }
 
-  private renderMediaItem(ctx: CanvasRenderingContext2D, media: any, x: number, y: number, width: number, height: number): void {
+  private async renderMediaItem(ctx: CanvasRenderingContext2D, media: any, x: number, y: number, width: number, height: number): Promise<void> {
     // Draw media placeholder with rounded corners
     ctx.fillStyle = '#2f3336'; // Dark gray background for media
     this.drawRoundedRect(ctx, x, y, width, height, 12);
     ctx.fill();
-    
-    // Add media type indicator
-    ctx.fillStyle = '#71767b';
-    ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.textAlign = 'center';
-    
-    let mediaText = '📷';
-    if (media.type === 'video') {
-      mediaText = '🎥';
-    } else if (media.type === 'animated_gif') {
-      mediaText = '🎬';
+
+    // Try to load and draw the actual media image
+    let imageUrl = media.url;
+    if (media.type === 'video' || media.type === 'animated_gif') {
+      imageUrl = media.preview_image_url || media.url;
     }
-    
-    ctx.fillText(mediaText, x + width / 2, y + height / 2);
-    
+    let imageLoaded = false;
+    if (imageUrl) {
+      try {
+        const img = await loadImage(imageUrl);
+        // Calculate cover crop
+        const imgAspect = img.width / img.height;
+        const boxAspect = width / height;
+        let sx = 0, sy = 0, sw = img.width, sh = img.height;
+        if (imgAspect > boxAspect) {
+          // Image is wider than box: crop sides
+          sw = img.height * boxAspect;
+          sx = (img.width - sw) / 2;
+        } else {
+          // Image is taller than box: crop top/bottom
+          sh = img.width / boxAspect;
+          sy = (img.height - sh) / 2;
+        }
+        ctx.save();
+        this.drawRoundedRect(ctx, x, y, width, height, 12);
+        ctx.clip();
+        ctx.drawImage(img, sx, sy, sw, sh, x, y, width, height);
+        ctx.restore();
+        imageLoaded = true;
+        logger.debug('Media image loaded successfully', { imageUrl, type: media.type });
+      } catch (error) {
+        logger.warn('Failed to load media image, using placeholder', { imageUrl, type: media.type, error: error instanceof Error ? error.message : error });
+      }
+    }
+
+    // If image not loaded, show placeholder and type emoji
+    if (!imageLoaded) {
+      // Add media type indicator
+      ctx.fillStyle = '#71767b';
+      ctx.font = '24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      let mediaText = '📷';
+      if (media.type === 'video') {
+        mediaText = '🎥';
+      } else if (media.type === 'animated_gif') {
+        mediaText = '🎬';
+      }
+      ctx.fillText(mediaText, x + width / 2, y + height / 2 + 8);
+      ctx.textAlign = 'left';
+    }
+
     // Add alt text if available
     if (media.alt_text) {
       ctx.fillStyle = '#ffffff';
       ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
       ctx.fillText('Alt: ' + media.alt_text.substring(0, 20) + (media.alt_text.length > 20 ? '...' : ''), x + width / 2, y + height - 8);
+      ctx.textAlign = 'left';
     }
-    
-    ctx.textAlign = 'left';
   }
 
   private renderFooter(ctx: CanvasRenderingContext2D, tweet: TwitterTweet, dimensions: TweetDimensions): void {
     const footerY = dimensions.height - 40;
     
     // Engagement metrics (if available)
-    if (tweet.public_metrics) {
-      const metrics = [
-        { icon: '💬', count: tweet.public_metrics.reply_count },
-        { icon: '🔄', count: tweet.public_metrics.retweet_count },
-        { icon: '❤️', count: tweet.public_metrics.like_count },
-        { icon: '📊', count: tweet.public_metrics.quote_count }
-      ];
-      
-      let metricX = this.PADDING + this.AVATAR_SIZE + 12;
-      
-      for (const metric of metrics) {
-        if (metric.count > 0) {
-          ctx.fillStyle = '#71767b';
-          ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-          ctx.fillText(`${metric.icon} ${metric.count}`, metricX, footerY);
-          metricX += ctx.measureText(`${metric.icon} ${metric.count}`).width + 24;
-        }
+    const metrics = [
+      { icon: '💬', count: tweet.public_metrics?.reply_count ?? 0 },
+      { icon: '🔄', count: tweet.public_metrics?.retweet_count ?? 0 },
+      { icon: '❤️', count: tweet.public_metrics?.like_count ?? 0 },
+      { icon: '📊', count: tweet.public_metrics?.quote_count ?? 0 }
+    ];
+    
+    let metricX = this.PADDING + this.AVATAR_SIZE + 12;
+    
+    for (const metric of metrics) {
+      if (metric.count > 0) {
+        ctx.fillStyle = '#71767b';
+        ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillText(`${metric.icon} ${metric.count}`, metricX, footerY);
+        metricX += ctx.measureText(`${metric.icon} ${metric.count}`).width + 24;
       }
     }
     

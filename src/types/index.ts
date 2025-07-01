@@ -49,6 +49,10 @@ export interface TwitterTweet {
 export interface User {
   id: string;
   author_id: string;
+  username?: string;
+  name?: string;
+  profile_image_url?: string;
+  verified?: boolean;
   created_at: Date;
   updated_at: Date;
 }
