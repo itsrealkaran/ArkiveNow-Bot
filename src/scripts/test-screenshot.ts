@@ -1,6 +1,6 @@
 import screenshotService from '../services/screenshot';
 import logger from '../utils/logger';
-import { TwitterTweet, TwitterUser } from '../types';
+import { TwitterTweet } from '../types';
 
 interface TestTweet {
   name: string;
@@ -31,6 +31,7 @@ async function testScreenshotService() {
             username: 'testuser',
             name: 'Test User',
             profile_image_url: 'https://pbs.twimg.com/profile_images/1234567890/test_normal.jpg',
+            verified: true,
           },
           public_metrics: {
             retweet_count: 5,
@@ -53,6 +54,7 @@ async function testScreenshotService() {
             username: 'longtweetuser',
             name: 'Long Tweet User',
             profile_image_url: 'https://pbs.twimg.com/profile_images/1234567891/long_normal.jpg',
+            verified: true,
           },
           public_metrics: {
             retweet_count: 15,
@@ -74,7 +76,8 @@ async function testScreenshotService() {
             id: 'viraluser',
             username: 'viraluser',
             name: 'Viral User',
-            profile_image_url: 'https://pbs.twimg.com/profile_images/1234567892/viral_normal.jpg',
+            profile_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+            verified: true,
           },
           public_metrics: {
             retweet_count: 15420,
@@ -97,6 +100,7 @@ async function testScreenshotService() {
             username: 'quietuser',
             name: 'Quiet User',
             profile_image_url: 'https://pbs.twimg.com/profile_images/1234567893/quiet_normal.jpg',
+            verified: true,
           },
           public_metrics: {
             retweet_count: 0,
@@ -119,6 +123,7 @@ async function testScreenshotService() {
             username: 'specialuser',
             name: 'Special User',
             profile_image_url: 'https://pbs.twimg.com/profile_images/1234567894/special_normal.jpg',
+            verified: true,
           },
           public_metrics: {
             retweet_count: 12,
@@ -140,7 +145,8 @@ async function testScreenshotService() {
             id: 'verylongusername123456789',
             username: 'verylongusername123456789',
             name: 'Very Long Username User',
-            profile_image_url: 'https://pbs.twimg.com/profile_images/1234567895/verylong_normal.jpg',
+            profile_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+            verified: true,
           },
           public_metrics: {
             retweet_count: 3,
@@ -178,15 +184,15 @@ async function testScreenshotService() {
             id: 'mediauser',
             username: 'mediauser',
             name: 'Media User',
-            profile_image_url: 'https://pbs.twimg.com/profile_images/1234567897/media_normal.jpg',
+            profile_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
             verified: true,
           },
           media: [
             {
               media_key: '3_1234567890123456789',
               type: 'photo',
-              url: 'https://pbs.twimg.com/media/example.jpg',
-              preview_image_url: 'https://pbs.twimg.com/media/example.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 1200,
               height: 800,
               alt_text: 'A beautiful example image',
@@ -212,15 +218,15 @@ async function testScreenshotService() {
             id: 'multimediauser',
             username: 'multimediauser',
             name: 'Multi Media User',
-            profile_image_url: 'https://pbs.twimg.com/profile_images/1234567898/multi_normal.jpg',
-            verified: false,
+            profile_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+            verified: true,
           },
           media: [
             {
               media_key: '3_1234567890123456790',
               type: 'photo',
-              url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-              preview_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 800,
               height: 600,
               alt_text: 'First photo description',
@@ -228,8 +234,8 @@ async function testScreenshotService() {
             {
               media_key: '3_1234567890123456791',
               type: 'photo',
-              url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-              preview_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 600,
               height: 800,
               alt_text: 'Second photo description',
@@ -237,8 +243,8 @@ async function testScreenshotService() {
             {
               media_key: '3_1234567890123456792',
               type: 'photo',
-              url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-              preview_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 1000,
               height: 500,
               alt_text: 'Third photo description',
@@ -264,15 +270,15 @@ async function testScreenshotService() {
             id: 'videouser',
             username: 'videouser',
             name: 'Video User',
-            profile_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+            profile_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
             verified: true,
           },
           media: [
             {
               media_key: '3_1234567890123456793',
               type: 'video',
-              url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-              preview_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 1920,
               height: 1080,
               alt_text: 'An awesome video with amazing content',
@@ -298,15 +304,15 @@ async function testScreenshotService() {
             id: 'gifuser',
             username: 'gifuser',
             name: 'GIF User',
-            profile_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-            verified: false,
+            profile_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+            verified: true,
           },
           media: [
             {
               media_key: '3_1234567890123456794',
               type: 'animated_gif',
-              url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-              preview_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 480,
               height: 270,
               alt_text: 'A funny animated GIF',
@@ -332,15 +338,15 @@ async function testScreenshotService() {
             id: 'fourmediauser',
             username: 'fourmediauser',
             name: 'Four Media User',
-            profile_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+            profile_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
             verified: true,
           },
           media: [
             {
               media_key: '3_1234567890123456795',
               type: 'photo',
-              url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-              preview_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 600,
               height: 600,
               alt_text: 'First photo',
@@ -348,8 +354,8 @@ async function testScreenshotService() {
             {
               media_key: '3_1234567890123456796',
               type: 'photo',
-              url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-              preview_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 600,
               height: 600,
               alt_text: 'Second photo',
@@ -357,8 +363,8 @@ async function testScreenshotService() {
             {
               media_key: '3_1234567890123456797',
               type: 'photo',
-              url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-              preview_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 600,
               height: 600,
               alt_text: 'Third photo',
@@ -366,8 +372,8 @@ async function testScreenshotService() {
             {
               media_key: '3_1234567890123456798',
               type: 'photo',
-              url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-              preview_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
+              url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+              preview_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
               width: 600,
               height: 600,
               alt_text: 'Fourth photo',
@@ -393,8 +399,8 @@ async function testScreenshotService() {
             id: 'realprofileuser',
             username: 'realprofileuser',
             name: 'Real Profile User',
-            profile_image_url: 'https://pbs.twimg.com/profile_images/1938254665964990464/miCNVNmX_400x400.jpg',
-            verified: false,
+            profile_image_url: 'https://pbs.twimg.com/profile_images/1940352680846635008/gMK5JINJ_400x400.jpg',
+            verified: true,
           },
           public_metrics: {
             retweet_count: 5,

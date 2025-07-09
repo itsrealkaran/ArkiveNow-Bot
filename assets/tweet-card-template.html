@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Light Theme Tweet Card</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f7f9fa;
+            color: #0f1419;
+            line-height: 1.4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            border-bottom: 1px solid #e1e8ed;
+            background-color: #ffffff;
+            border-radius: 8px;
+        }
+        .header h1 {
+            color: #1d9bf0;
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        .tweet-card {
+            background-color: #ffffff;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .tweet-card:hover {
+            background-color: #f7f9fa;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+        .download-btn {
+            position: absolute;
+            top: 8px;
+            right: 50px;
+            background: #1d9bf0;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 11;
+        }
+        .tweet-card:hover .download-btn {
+            opacity: 1;
+        }
+        .download-btn:hover {
+            background: #1a8cd8;
+        }
+        .branding-logo {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 40px;
+            height: 40px;
+            z-index: 10;
+            opacity: 0.8;
+            transition: opacity 0.2s ease;
+        }
+        .tweet-card:hover .branding-logo {
+            opacity: 1;
+        }
+        .tweet-header {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            margin-right: 100px;
+        }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        .tweet-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+        .display-name {
+            font-weight: 700;
+            color: #0f1419;
+            font-size: 15px;
+        }
+        .verification-badge {
+            width: 16px;
+            height: 16px;
+            margin-left: 2px;
+        }
+        .username {
+            color: #536471;
+            font-size: 15px;
+        }
+        .timestamp {
+            color: #536471;
+            font-size: 15px;
+        }
+        .tweet-content {
+            font-size: 15px;
+            line-height: 1.3;
+            margin-bottom: 12px;
+            word-wrap: break-word;
+            color: #0f1419;
+        }
+        .hashtag {
+            color: #1d9bf0;
+        }
+        .mention {
+            color: #1d9bf0;
+        }
+        .tweet-link {
+            color: #1d9bf0;
+            text-decoration: none;
+        }
+        .tweet-link:hover {
+            text-decoration: underline;
+        }
+        .media-container {
+            margin: 12px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e1e8ed;
+        }
+        .tweet-image {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .tweet-actions {
+            display: flex;
+            justify-content: space-between;
+            max-width: 425px;
+            margin-top: 12px;
+        }
+        .action-button {
+            display: flex;
+            align-items: center;
+            background: none;
+            border: none;
+            color: #536471;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+            font-size: 13px;
+        }
+        .action-button:hover {
+            background-color: rgba(29, 155, 240, 0.1);
+            color: #1d9bf0;
+        }
+        .action-icon {
+            width: 18px;
+            height: 18px;
+            margin-right: 4px;
+        }
+        @media (max-width: 480px) {
+            .container {
+                padding: 10px;
+            }
+            .tweet-card {
+                padding: 12px;
+            }
+            .tweet-actions {
+                max-width: 100%;
+            }
+            .tweet-header {
+                margin-right: 90px;
+            }
+            .branding-logo {
+                width: 35px;
+                height: 35px;
+            }
+            .download-btn {
+                right: 40px;
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="tweet-container"></div>
+    </div>
+    <script>
+    function formatContent(content) {
+        if (!content) return '';
+        return content
+            .replace(/#(\w+)/g, '<span class="hashtag">#$1</span>')
+            .replace(/@(\w+)/g, '<span class="mention">@$1</span>')
+            .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" class="tweet-link" target="_blank">$1</a>');
+    }
+    function renderVerificationBadge(verificationType) {
+        if (!verificationType) return '';
+        const colors = { 'verified': '#1d9bf0', 'business': '#ffd700', 'government': '#829aab' };
+        return `<svg class="verification-badge" viewBox="0 0 24 24" fill="${colors[verificationType] || '#1d9bf0'}"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>`;
+    }
+    function getUser(tweet) {
+        return tweet.user || tweet.author || {};
+    }
+    function getAvatar(user) {
+        return user.avatar || user.profile_image_url || 'https://dummyimage.com/40x40/cccccc/000000&text=+';
+    }
+    function getDisplayName(user, tweet) {
+        return user.displayName || user.name || tweet.author_id || 'Unknown';
+    }
+    function getUsername(user, tweet) {
+        return user.username || user.screen_name || tweet.author_id || 'unknown';
+    }
+    function getVerification(user) {
+        return user.verification || (user.verified ? 'verified' : undefined);
+    }
+    function getTimestamp(tweet) {
+        if (tweet.timestamp) return tweet.timestamp;
+        if (tweet.created_at) {
+            try {
+                return new Date(tweet.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric' });
+            } catch (e) { return ''; }
+        }
+        return '';
+    }
+    function getMedia(tweet) {
+        if (Array.isArray(tweet.media) && tweet.media.length > 0) {
+            return tweet.media[0];
+        } else if (tweet.media && tweet.media.url) {
+            return tweet.media;
+        }
+        return null;
+    }
+    function getMediaUrl(media) {
+        return (media && media.url) ? media.url : 'https://dummyimage.com/500x300/cccccc/000000&text=+';
+    }
+    function renderTopRightElements(tweetId) {
+        return `
+            <button class="download-btn" onclick="window.downloadTweetAsImage && window.downloadTweetAsImage('${tweetId}')" title="Download as image">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                </svg>
+                Download
+            </button>
+            <img src="./branding.png" alt="Brand Logo" class="branding-logo" crossorigin="anonymous">
+        `;
+    }
+    function renderTweetCard(tweet) {
+        const user = getUser(tweet);
+        const avatar = getAvatar(user);
+        const displayName = getDisplayName(user, tweet);
+        const username = getUsername(user, tweet);
+        const verification = getVerification(user);
+        const timestamp = getTimestamp(tweet);
+        const media = getMedia(tweet);
+        return `
+        <div class="tweet-card" data-tweet-id="${tweet.id}">
+            ${renderTopRightElements(tweet.id)}
+            <div class="tweet-header">
+                <img src="${avatar}" alt="${displayName}" class="avatar" crossorigin="anonymous">
+                <div class="tweet-info">
+                    <div class="user-info">
+                        <span class="display-name">${displayName}</span>
+                        ${renderVerificationBadge(verification)}
+                        <span class="username">@${username}</span>
+                        <span class="timestamp">· ${timestamp}</span>
+                    </div>
+                    <div class="tweet-content">${formatContent(tweet.content || tweet.text || '')}</div>
+                    ${media ? `<div class="media-container"><img src="${getMediaUrl(media)}" alt="media" class="tweet-image" crossorigin="anonymous"></div>` : ''}
+                    <div class="tweet-actions">
+                        <button class="action-button"><svg class="action-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01z"/></svg> <span>${tweet.engagement?.replies ?? tweet.public_metrics?.reply_count ?? 0}</span></button>
+                        <button class="action-button"><svg class="action-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2z"/></svg> <span>${tweet.engagement?.retweets ?? tweet.public_metrics?.retweet_count ?? 0}</span></button>
+                        <button class="action-button"><svg class="action-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg> <span>${tweet.engagement?.likes ?? tweet.public_metrics?.like_count ?? 0}</span></button>
+                        <button class="action-button"><svg class="action-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.59l5.7 5.7-1.41 1.42L13 6.41V16h-2V6.41l-3.29 3.3-1.42-1.42L12 2.59zM21 15l-.02 3.51c0 1.38-1.12 2.49-2.5 2.49H5.5C4.11 21 3 19.88 3 18.5V15h2v3.5c0 .28.22.5.5.5h12.98c.28 0 .5-.22.5-.5L19 15h2z"/></svg> <span>${tweet.engagement?.shares ?? tweet.public_metrics?.quote_count ?? 0}</span></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+    }
+    // Download as image (for browser, not used by puppeteer)
+    window.downloadTweetAsImage = async function(tweetId) {
+        const tweetElement = document.querySelector(`[data-tweet-id="${tweetId}"]`);
+        if (!tweetElement) return;
+        const clonedElement = tweetElement.cloneNode(true);
+        const downloadBtn = clonedElement.querySelector('.download-btn');
+        if (downloadBtn) downloadBtn.remove();
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'absolute';
+        tempContainer.style.left = '-9999px';
+        tempContainer.style.top = '-9999px';
+        tempContainer.style.width = '568px';
+        tempContainer.appendChild(clonedElement);
+        document.body.appendChild(tempContainer);
+        const canvas = await html2canvas(clonedElement, {
+            backgroundColor: '#ffffff',
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            width: 568,
+            height: clonedElement.offsetHeight
+        });
+        document.body.removeChild(tempContainer);
+        const link = document.createElement('a');
+        link.download = `tweet-${tweetId}-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+    // Expose a function to render the tweet card from window.tweetData
+    window.renderTweet = function(tweetData) {
+        document.getElementById('tweet-container').innerHTML = renderTweetCard(tweetData);
+    };
+    // If window.tweetData is set, render immediately
+    if (window.tweetData) {
+        window.renderTweet(window.tweetData);
+    }
+    </script>
+</body>
+</html> 

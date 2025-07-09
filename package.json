@@ -40,9 +40,10 @@
     "canvas": "^3.1.2",
     "dotenv": "^16.5.0",
     "html-to-image": "^1.11.13",
+    "node-html-to-image": "^5.0.0",
     "pg": "^8.16.2",
     "playwright-core": "^1.53.1",
-    "puppeteer-core": "^24.11.1",
+    "puppeteer": "^24.11.2",
     "twitter-api-v2": "^1.23.2",
     "winston": "^3.17.0",
     "zod": "^3.25.67"
