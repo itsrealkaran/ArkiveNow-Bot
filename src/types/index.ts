@@ -43,6 +43,15 @@ export interface TwitterTweet {
   };
   author?: TwitterUser;
   media?: TwitterMedia[];
+  referenced_tweets?: Array<{
+    type: 'replied_to' | 'retweeted' | 'quoted';
+    id: string;
+  }>;
+  includes?: {
+    users?: TwitterUser[];
+    media?: TwitterMedia[];
+    tweets?: TwitterTweet[];
+  };
 }
 
 // Database Types

@@ -19,9 +19,24 @@ class ScreenshotService {
     try {
       // Read HTML template
       const templateHtml = await fs.readFile(this.TEMPLATE_PATH, 'utf8');
-      // Launch Puppeteer
-      const browser = await puppeteer.launch({ headless: true });
+      // Launch Puppeteer with proper settings for image loading
+      const browser = await puppeteer.launch({ 
+        headless: false,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ]
+      });
       const page = await browser.newPage();
+      
+      // Set viewport and user agent for better compatibility
+      await page.setViewport({ width: 1200, height: 800 });
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
       // Serve the HTML template as a data URL
       await page.setContent(templateHtml, { waitUntil: 'networkidle0' });
       // Inject tweet data and render
@@ -33,47 +48,84 @@ class ScreenshotService {
       }, tweet);
       // Wait for tweet card to render
       await page.waitForSelector('.tweet-card');
-      // Scroll tweet card into view (in case of lazy loading)
-      await page.evaluate(() => {
+      
+      // Wait for all images to load properly with better error handling
+      await page.evaluate(async () => {
         // @ts-expect-error: document is defined in browser context
         const tweetEl = document.querySelector('.tweet-card');
-        if (tweetEl) tweetEl.scrollIntoView();
+        if (!tweetEl) return;
+        
+        const images = tweetEl.querySelectorAll('img');
+        if (images.length === 0) return;
+        
+        // Wait for all images to load with proper error handling
+        await Promise.all(Array.from(images).map((img, index) => {
+          return new Promise<void>((resolve) => {
+            // @ts-expect-error: HTMLImageElement is defined in browser context
+            const imgElement = img as HTMLImageElement;
+            
+            // If image is already loaded
+            if (imgElement.complete && imgElement.naturalWidth > 0) {
+              resolve();
+              return;
+            }
+            
+            // Set up load and error handlers
+            const handleLoad = () => {
+              imgElement.removeEventListener('load', handleLoad);
+              imgElement.removeEventListener('error', handleError);
+              resolve();
+            };
+            
+            const handleError = () => {
+              console.warn(`Image failed to load: ${imgElement.src}`);
+              imgElement.removeEventListener('load', handleLoad);
+              imgElement.removeEventListener('error', handleError);
+              resolve(); // Resolve even on error to continue
+            };
+            
+            imgElement.addEventListener('load', handleLoad, { once: true });
+            imgElement.addEventListener('error', handleError, { once: true });
+            
+            // Timeout after 10 seconds
+            setTimeout(() => {
+              imgElement.removeEventListener('load', handleLoad);
+              imgElement.removeEventListener('error', handleError);
+              console.warn(`Image load timeout: ${imgElement.src}`);
+              resolve();
+            }, 500);
+          });
+        }));
+        
+        // Additional wait to ensure images are fully rendered
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Final check - verify all images are properly loaded
+        const finalImages = tweetEl.querySelectorAll('img');
+        const loadedImages = Array.from(finalImages).filter(img => {
+          // @ts-expect-error: HTMLImageElement is defined in browser context
+          const imgElement = img as HTMLImageElement;
+          return imgElement.complete && imgElement.naturalWidth > 0;
+        });
+        
+        console.log(`Image loading status: ${loadedImages.length}/${finalImages.length} images loaded successfully`);
       });
-      // Add a short delay to allow images to start loading
-      await new Promise(res => setTimeout(res, 1000));
-      // Use html2canvas in the page context
+      
+      // Take screenshot with html2canvas
       const dataUrl = await page.evaluate(async () => {
         // @ts-expect-error: document is defined in browser context
         const tweetEl = document.querySelector('.tweet-card');
-        const images = tweetEl.querySelectorAll('img');
-        await Promise.all(Array.from(images).map(img => {
-          return new Promise(resolve => {
-            // @ts-expect-error: HTMLImageElement is defined in browser context
-            if ((img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth !== 0) {
-              return resolve(true);
-            }
-            // Otherwise, wait for load/error, or timeout after 5s
-            let settled = false;
-            const done = () => { if (!settled) { settled = true; resolve(true); } };
-            // @ts-expect-error: HTMLImageElement is defined in browser context
-            (img as HTMLImageElement).addEventListener('load', done, { once: true });
-            // @ts-expect-error: HTMLImageElement is defined in browser context
-            (img as HTMLImageElement).addEventListener('error', done, { once: true });
-            setTimeout(done, 200);
-          });
-        }));
-        // Log failed images for debugging
-        const failedImages = Array.from(images).filter(img => {
-          // @ts-expect-error: HTMLImageElement is defined in browser context
-          return (img as HTMLImageElement).naturalWidth === 0;
-        });
-        if (failedImages.length) {
-          // @ts-expect-error: console is available in browser context
-          console.warn('Some images failed to load:', failedImages.map(img => img.src));
-        }
-        // Now run html2canvas
+        if (!tweetEl) throw new Error('Tweet element not found');
+        
         // @ts-expect-error: window is defined in browser context
-        const canvas = await (window as any).html2canvas(tweetEl, { backgroundColor: '#fff', scale: 2 });
+        const canvas = await (window as any).html2canvas(tweetEl, { 
+          backgroundColor: '#fff', 
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false
+        });
+        
         return canvas.toDataURL('image/png');
       });
       // Convert data URL to buffer
