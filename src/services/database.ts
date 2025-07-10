@@ -73,11 +73,38 @@ class DatabaseService {
         )
       `);
 
+      // Create tweets table to store all tweet data
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tweets (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tweet_id VARCHAR(255) UNIQUE NOT NULL,
+          author_id VARCHAR(255) NOT NULL,
+          text TEXT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+          public_metrics JSONB,
+          author_data JSONB,
+          media_data JSONB,
+          referenced_tweets JSONB,
+          includes_data JSONB,
+          screenshot_arweave_id VARCHAR(255),
+          screenshot_created_at TIMESTAMP WITH TIME ZONE,
+          processing_status VARCHAR(50) DEFAULT 'pending' CHECK (processing_status IN ('pending', 'processing', 'completed', 'failed')),
+          error_message TEXT,
+          created_at_db TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+      `);
+
       // Create indexes for better performance
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_usage_logs_user_id ON usage_logs(user_id);
         CREATE INDEX IF NOT EXISTS idx_usage_logs_created_at ON usage_logs(created_at);
         CREATE INDEX IF NOT EXISTS idx_users_author_id ON users(author_id);
+        CREATE INDEX IF NOT EXISTS idx_tweets_tweet_id ON tweets(tweet_id);
+        CREATE INDEX IF NOT EXISTS idx_tweets_author_id ON tweets(author_id);
+        CREATE INDEX IF NOT EXISTS idx_tweets_processing_status ON tweets(processing_status);
+        CREATE INDEX IF NOT EXISTS idx_tweets_created_at ON tweets(created_at);
+        CREATE INDEX IF NOT EXISTS idx_tweets_screenshot_created_at ON tweets(screenshot_created_at);
       `);
 
       await client.query('COMMIT');
@@ -243,11 +270,11 @@ class DatabaseService {
         SELECT table_name 
         FROM information_schema.tables 
         WHERE table_schema = 'public' 
-        AND table_name IN ('users', 'usage_logs', 'user_quotas')
+        AND table_name IN ('users', 'usage_logs', 'user_quotas', 'tweets')
       `);
       
       const existingTables = result.rows.map(row => row.table_name);
-      const requiredTables = ['users', 'usage_logs', 'user_quotas'];
+      const requiredTables = ['users', 'usage_logs', 'user_quotas', 'tweets'];
       const allTablesExist = requiredTables.every(table => existingTables.includes(table));
       
       logger.info('Database tables check', { 
@@ -291,6 +318,199 @@ class DatabaseService {
       );
       logger.info('Upserted user', { authorId: user.author_id, userId: result.rows[0].id });
       return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  // Tweet storage methods
+  async storeTweet(tweetData: {
+    tweet_id: string;
+    author_id: string;
+    text: string;
+    created_at: string;
+    public_metrics?: any;
+    author_data?: any;
+    media_data?: any;
+    referenced_tweets?: any;
+    includes_data?: any;
+  }): Promise<void> {
+    const client = await this.pool.connect();
+    
+    try {
+      await client.query(
+        `INSERT INTO tweets (
+          tweet_id, author_id, text, created_at, public_metrics, 
+          author_data, media_data, referenced_tweets, includes_data
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (tweet_id) DO UPDATE SET
+          text = EXCLUDED.text,
+          public_metrics = EXCLUDED.public_metrics,
+          author_data = EXCLUDED.author_data,
+          media_data = EXCLUDED.media_data,
+          referenced_tweets = EXCLUDED.referenced_tweets,
+          includes_data = EXCLUDED.includes_data,
+          updated_at = NOW()`,
+        [
+          tweetData.tweet_id,
+          tweetData.author_id,
+          tweetData.text,
+          tweetData.created_at,
+          JSON.stringify(tweetData.public_metrics),
+          JSON.stringify(tweetData.author_data),
+          JSON.stringify(tweetData.media_data),
+          JSON.stringify(tweetData.referenced_tweets),
+          JSON.stringify(tweetData.includes_data)
+        ]
+      );
+      
+      logger.info('Stored tweet data', { tweetId: tweetData.tweet_id });
+    } finally {
+      client.release();
+    }
+  }
+
+  async getTweetByTweetId(tweetId: string): Promise<any> {
+    const client = await this.pool.connect();
+    
+    try {
+      const result = await client.query(
+        'SELECT * FROM tweets WHERE tweet_id = $1',
+        [tweetId]
+      );
+      
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateTweetProcessingStatus(
+    tweetId: string, 
+    status: 'pending' | 'processing' | 'completed' | 'failed',
+    arweaveId?: string,
+    errorMessage?: string
+  ): Promise<void> {
+    const client = await this.pool.connect();
+    
+    try {
+      const updateData: any = {
+        processing_status: status,
+        updated_at: new Date()
+      };
+
+      if (status === 'completed' && arweaveId) {
+        updateData.screenshot_arweave_id = arweaveId;
+        updateData.screenshot_created_at = new Date();
+      }
+
+      if (status === 'failed' && errorMessage) {
+        updateData.error_message = errorMessage;
+      }
+
+      const setClause = Object.keys(updateData)
+        .map((key, index) => `${key} = $${index + 2}`)
+        .join(', ');
+
+      await client.query(
+        `UPDATE tweets SET ${setClause} WHERE tweet_id = $1`,
+        [tweetId, ...Object.values(updateData)]
+      );
+      
+      logger.info('Updated tweet processing status', { 
+        tweetId, 
+        status, 
+        arweaveId: arweaveId || null 
+      });
+    } finally {
+      client.release();
+    }
+  }
+
+  async getTweetsByStatus(status: 'pending' | 'processing' | 'completed' | 'failed', limit = 100): Promise<any[]> {
+    const client = await this.pool.connect();
+    
+    try {
+      const result = await client.query(
+        'SELECT * FROM tweets WHERE processing_status = $1 ORDER BY created_at_db DESC LIMIT $2',
+        [status, limit]
+      );
+      
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getTweetsByAuthorId(authorId: string, limit = 50): Promise<any[]> {
+    const client = await this.pool.connect();
+    
+    try {
+      const result = await client.query(
+        'SELECT * FROM tweets WHERE author_id = $1 ORDER BY created_at DESC LIMIT $2',
+        [authorId, limit]
+      );
+      
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getTweetStats(): Promise<{
+    total_tweets: number;
+    completed_tweets: number;
+    failed_tweets: number;
+    pending_tweets: number;
+    processing_tweets: number;
+  }> {
+    const client = await this.pool.connect();
+    
+    try {
+      const result = await client.query(`
+        SELECT 
+          COUNT(*) as total_tweets,
+          COUNT(CASE WHEN processing_status = 'completed' THEN 1 END) as completed_tweets,
+          COUNT(CASE WHEN processing_status = 'failed' THEN 1 END) as failed_tweets,
+          COUNT(CASE WHEN processing_status = 'pending' THEN 1 END) as pending_tweets,
+          COUNT(CASE WHEN processing_status = 'processing' THEN 1 END) as processing_tweets
+        FROM tweets
+      `);
+      
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  async getLatestTweetTimestamp(): Promise<string | null> {
+    const client = await this.pool.connect();
+    
+    try {
+      const result = await client.query(`
+        SELECT created_at 
+        FROM tweets 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `);
+      
+      return result.rows[0]?.created_at || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getLatestMentionTimestamp(): Promise<string | null> {
+    const client = await this.pool.connect();
+    
+    try {
+      const result = await client.query(`
+        SELECT MAX(created_at) as latest_mention_time
+        FROM usage_logs
+        WHERE event_type = 'success'
+      `);
+      
+      return result.rows[0]?.latest_mention_time || null;
     } finally {
       client.release();
     }

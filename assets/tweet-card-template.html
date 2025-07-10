@@ -146,22 +146,312 @@
         .tweet-link:hover {
             text-decoration: underline;
         }
+        
+        /* Media Container Styles */
         .media-container {
             margin: 12px 0;
             border-radius: 8px;
             overflow: hidden;
             border: 1px solid #e1e8ed;
         }
+        
+        /* Single media item */
+        .media-item {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        /* Multiple media grid */
+        .media-grid {
+            display: grid;
+        }
+        
+        .media-grid.grid-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+        
+        /* Updated 3-media grid: 2 on top, 1 on bottom */
+        .media-grid.grid-3 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto;
+        }
+        
+        .media-grid.grid-3 .media-item:nth-child(1) {
+            grid-column: 1;
+            grid-row: 1;
+        }
+        
+        .media-grid.grid-3 .media-item:nth-child(2) {
+            grid-column: 2;
+            grid-row: 1;
+        }
+        
+        .media-grid.grid-3 .media-item:nth-child(3) {
+            grid-column: 1 / 3; /* Span both columns */
+            grid-row: 2;
+        }
+        
+        .media-grid.grid-4 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        
+        /* Media types */
         .tweet-image {
             width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+            object-position: center;
+        }
+        
+        /* Single media - maintain aspect ratio */
+        .media-container:not(.media-grid) .media-item {
+            min-height: 200px;
+            max-height: 400px;
+        }
+        
+        .media-container:not(.media-grid) .tweet-image {
             height: auto;
+            max-height: 400px;
+            object-fit: contain; /* Don't stretch single images */
+        }
+        
+        /* Grid media heights */
+        .media-grid .media-item {
+            height: 150px;
+        }
+        
+        /* Special handling for 3-grid bottom image */
+        .media-grid.grid-3 .media-item:nth-child(3) {
+            height: 200px; /* Slightly taller for the bottom image */
+        }
+        
+        /* Video player styles */
+        .video-player {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: inherit;
+        }
+        
+        .video-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
             display: block;
         }
+        
+        .video-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        
+        .video-overlay:hover {
+            background: rgba(0, 0, 0, 0.8);
+        }
+        
+        .play-icon {
+            width: 24px;
+            height: 24px;
+            fill: white;
+            margin-left: 3px; /* Slight offset for visual centering */
+        }
+        
+        /* GIF indicator */
+        .gif-indicator {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        /* Media counter for multiple items */
+        .media-counter {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
         .tweet-actions {
             display: flex;
             justify-content: space-between;
             max-width: 425px;
             margin-top: 12px;
+        }
+        
+        /* Quoted Tweet Styles */
+        .quoted-tweet {
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            margin: 12px 0;
+            overflow: hidden;
+            background-color: #f7f9fa;
+        }
+        
+        .quoted-tweet-content {
+            padding: 12px;
+        }
+        
+        .quoted-tweet-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .quoted-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+        
+        .quoted-user-info {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        
+        .quoted-display-name {
+            font-weight: 700;
+            color: #0f1419;
+            font-size: 13px;
+        }
+        
+        .quoted-username {
+            color: #536471;
+            font-size: 13px;
+        }
+        
+        .quoted-tweet-text {
+            font-size: 13px;
+            line-height: 1.3;
+            color: #0f1419;
+            word-wrap: break-word;
+        }
+        
+        .quoted-media-container {
+            margin: 8px 0;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #e1e8ed;
+        }
+        
+        .quoted-media-grid {
+            display: grid;
+            gap: 1px;
+        }
+        
+        .quoted-media-grid.grid-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+        
+        .quoted-media-grid.grid-3 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto;
+        }
+        
+        .quoted-media-grid.grid-3 .media-item:nth-child(1) {
+            grid-column: 1;
+            grid-row: 1;
+        }
+        
+        .quoted-media-grid.grid-3 .media-item:nth-child(2) {
+            grid-column: 2;
+            grid-row: 1;
+        }
+        
+        .quoted-media-grid.grid-3 .media-item:nth-child(3) {
+            grid-column: 1 / 3;
+            grid-row: 2;
+        }
+        
+        .quoted-media-grid.grid-4 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        
+        .quoted-media-item {
+            position: relative;
+            width: 100%;
+            height: 80px;
+        }
+        
+        .quoted-tweet-image {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+            object-position: center;
+        }
+        
+        .quoted-video-player {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quoted-video-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            display: block;
+        }
+        
+        .quoted-video-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quoted-play-icon {
+            width: 16px;
+            height: 16px;
+            fill: white;
+            margin-left: 2px;
         }
         .action-button {
             display: flex;
@@ -206,6 +496,65 @@
                 padding: 4px 8px;
                 font-size: 11px;
             }
+            
+            /* Mobile media adjustments */
+            .media-grid .media-item {
+                height: 120px;
+            }
+            
+            .media-grid.grid-3 .media-item:nth-child(3) {
+                height: 160px; /* Adjusted for mobile */
+            }
+            
+            .video-overlay {
+                width: 50px;
+                height: 50px;
+            }
+            
+            .play-icon {
+                width: 20px;
+                height: 20px;
+            }
+            
+            /* Mobile quoted tweet adjustments */
+            .quoted-tweet {
+                margin: 8px 0;
+            }
+            
+            .quoted-tweet-content {
+                padding: 8px;
+            }
+            
+            .quoted-avatar {
+                width: 28px;
+                height: 28px;
+            }
+            
+            .quoted-display-name {
+                font-size: 12px;
+            }
+            
+            .quoted-username {
+                font-size: 12px;
+            }
+            
+            .quoted-tweet-text {
+                font-size: 12px;
+            }
+            
+            .quoted-media-item {
+                height: 60px;
+            }
+            
+            .quoted-video-overlay {
+                width: 30px;
+                height: 30px;
+            }
+            
+            .quoted-play-icon {
+                width: 12px;
+                height: 12px;
+            }
         }
     </style>
 </head>
@@ -221,26 +570,33 @@
             .replace(/@(\w+)/g, '<span class="mention">@$1</span>')
             .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" class="tweet-link" target="_blank">$1</a>');
     }
+    
     function renderVerificationBadge(verificationType) {
         if (!verificationType) return '';
         const colors = { 'verified': '#1d9bf0', 'business': '#ffd700', 'government': '#829aab' };
         return `<svg class="verification-badge" viewBox="0 0 24 24" fill="${colors[verificationType] || '#1d9bf0'}"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>`;
     }
+    
     function getUser(tweet) {
         return tweet.user || tweet.author || {};
     }
+    
     function getAvatar(user) {
         return user.avatar || user.profile_image_url || 'https://dummyimage.com/40x40/cccccc/000000&text=+';
     }
+    
     function getDisplayName(user, tweet) {
         return user.displayName || user.name || tweet.author_id || 'Unknown';
     }
+    
     function getUsername(user, tweet) {
         return user.username || user.screen_name || tweet.author_id || 'unknown';
     }
+    
     function getVerification(user) {
         return user.verification || (user.verified ? 'verified' : undefined);
     }
+    
     function getTimestamp(tweet) {
         if (tweet.timestamp) return tweet.timestamp;
         if (tweet.created_at) {
@@ -250,17 +606,224 @@
         }
         return '';
     }
+    
     function getMedia(tweet) {
+        // Handle multiple media formats
         if (Array.isArray(tweet.media) && tweet.media.length > 0) {
-            return tweet.media[0];
-        } else if (tweet.media && tweet.media.url) {
             return tweet.media;
+        } else if (tweet.media && (tweet.media.url || tweet.media.preview_url)) {
+            return [tweet.media];
+        } else if (tweet.attachments && tweet.attachments.media_keys) {
+            // Twitter API v2 format
+            return tweet.includes?.media || [];
+        }
+        return [];
+    }
+    
+    function getQuotedTweet(tweet) {
+        // Check for referenced tweets that are quoted
+        if (tweet.referenced_tweets && tweet.referenced_tweets.length > 0) {
+            const quotedTweet = tweet.referenced_tweets.find(ref => ref.type === 'quoted');
+            if (quotedTweet && tweet.includes?.tweets) {
+                return tweet.includes.tweets.find(t => t.id === quotedTweet.id);
+            }
         }
         return null;
     }
+    
     function getMediaUrl(media) {
-        return (media && media.url) ? media.url : 'https://dummyimage.com/500x300/cccccc/000000&text=+';
+        return media.url || media.preview_url || 'https://dummyimage.com/500x300/cccccc/000000&text=+';
     }
+    
+    function getMediaType(media) {
+        if (media.type) return media.type;
+        if (media.media_type) return media.media_type;
+        
+        // Fallback: detect from URL or other properties
+        const url = getMediaUrl(media);
+        if (url.includes('.gif')) return 'gif';
+        if (url.includes('.mp4') || url.includes('.mov')) return 'video';
+        return 'image';
+    }
+    
+    function renderSingleMedia(media, index, totalCount) {
+        const mediaUrl = getMediaUrl(media);
+        const mediaType = getMediaType(media);
+        const alt = media.alt_text || media.alt || `Media ${index + 1}`;
+        
+        let mediaContent = '';
+        let indicators = '';
+        
+        switch (mediaType) {
+            case 'video':
+                // Use preview_url for video thumbnail with play button overlay
+                const previewUrl = media.preview_url || media.url;
+                mediaContent = `
+                    <div class="video-player">
+                        <img src="${previewUrl}" alt="${alt}" class="video-preview" crossorigin="anonymous">
+                        <div class="video-overlay">
+                            <svg class="play-icon" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z" fill="currentColor"/>
+                            </svg>
+                        </div>
+                    </div>
+                `;
+                break;
+                
+            case 'gif':
+                // Show GIF as normal image with GIF indicator
+                mediaContent = `<img src="${mediaUrl}" alt="${alt}" class="tweet-image" crossorigin="anonymous">`;
+                indicators = '<div class="gif-indicator">GIF</div>';
+                break;
+                
+            case 'image':
+            default:
+                mediaContent = `<img src="${mediaUrl}" alt="${alt}" class="tweet-image" crossorigin="anonymous">`;
+                break;
+        }
+        
+        // Add counter for multiple media (only show on last item)
+        if (totalCount > 1 && index === 0) {
+            indicators += `<div class="media-counter">1/${totalCount}</div>`;
+        }
+        
+        return `
+            <div class="media-item">
+                ${mediaContent}
+                ${indicators}
+            </div>
+        `;
+    }
+    
+    function renderQuotedTweet(quotedTweet) {
+        if (!quotedTweet) return '';
+        
+        const quotedUser = quotedTweet.author || {};
+        const quotedAvatar = getAvatar(quotedUser);
+        const quotedDisplayName = getDisplayName(quotedUser, quotedTweet);
+        const quotedUsername = getUsername(quotedUser, quotedTweet);
+        const quotedMediaArray = getMedia(quotedTweet);
+        
+        return `
+            <div class="quoted-tweet">
+                <div class="quoted-tweet-content">
+                    <div class="quoted-tweet-header">
+                        <img src="${quotedAvatar}" alt="${quotedDisplayName}" class="quoted-avatar" crossorigin="anonymous">
+                        <div class="quoted-user-info">
+                            <span class="quoted-display-name">${quotedDisplayName}</span>
+                            <span class="quoted-username">@${quotedUsername}</span>
+                        </div>
+                    </div>
+                    <div class="quoted-tweet-text">${formatContent(quotedTweet.text || '')}</div>
+                    ${renderQuotedMediaContainer(quotedMediaArray)}
+                </div>
+            </div>
+        `;
+    }
+    
+    function renderQuotedMediaContainer(mediaArray) {
+        if (!mediaArray || mediaArray.length === 0) return '';
+        
+        const mediaCount = mediaArray.length;
+        let gridClass = '';
+        let mediaToShow = mediaArray;
+        
+        // Determine grid layout based on media count
+        if (mediaCount === 1) {
+            gridClass = '';
+        } else if (mediaCount === 2) {
+            gridClass = 'quoted-media-grid grid-2';
+        } else if (mediaCount === 3) {
+            gridClass = 'quoted-media-grid grid-3';
+        } else {
+            gridClass = 'quoted-media-grid grid-4';
+            mediaToShow = mediaArray.slice(0, 4);
+        }
+        
+        const mediaItems = mediaToShow.map((media, index) => 
+            renderQuotedSingleMedia(media, index, mediaCount)
+        ).join('');
+        
+        return `
+            <div class="quoted-media-container">
+                <div class="${gridClass}">
+                    ${mediaItems}
+                </div>
+            </div>
+        `;
+    }
+    
+    function renderQuotedSingleMedia(media, index, totalCount) {
+        const mediaUrl = getMediaUrl(media);
+        const mediaType = getMediaType(media);
+        const alt = media.alt_text || media.alt || `Media ${index + 1}`;
+        
+        let mediaContent = '';
+        
+        switch (mediaType) {
+            case 'video':
+                const previewUrl = media.preview_url || media.url;
+                mediaContent = `
+                    <div class="quoted-video-player">
+                        <img src="${previewUrl}" alt="${alt}" class="quoted-video-preview" crossorigin="anonymous">
+                        <div class="quoted-video-overlay">
+                            <svg class="quoted-play-icon" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z" fill="currentColor"/>
+                            </svg>
+                        </div>
+                    </div>
+                `;
+                break;
+                
+            case 'gif':
+                mediaContent = `<img src="${mediaUrl}" alt="${alt}" class="quoted-tweet-image" crossorigin="anonymous">`;
+                break;
+                
+            case 'image':
+            default:
+                mediaContent = `<img src="${mediaUrl}" alt="${alt}" class="quoted-tweet-image" crossorigin="anonymous">`;
+                break;
+        }
+        
+        return `
+            <div class="quoted-media-item">
+                ${mediaContent}
+            </div>
+        `;
+    }
+    
+    function renderMediaContainer(mediaArray) {
+        if (!mediaArray || mediaArray.length === 0) return '';
+        
+        const mediaCount = mediaArray.length;
+        let gridClass = '';
+        let mediaToShow = mediaArray;
+        
+        // Determine grid layout based on media count
+        if (mediaCount === 1) {
+            gridClass = '';
+        } else if (mediaCount === 2) {
+            gridClass = 'media-grid grid-2';
+        } else if (mediaCount === 3) {
+            gridClass = 'media-grid grid-3';
+        } else {
+            gridClass = 'media-grid grid-4';
+            mediaToShow = mediaArray.slice(0, 4); // Show max 4 items
+        }
+        
+        const mediaItems = mediaToShow.map((media, index) => 
+            renderSingleMedia(media, index, mediaCount)
+        ).join('');
+        
+        return `
+            <div class="media-container">
+                <div class="${gridClass}">
+                    ${mediaItems}
+                </div>
+            </div>
+        `;
+    }
+    
     function renderTopRightElements(tweetId) {
         return `
             <button class="download-btn" onclick="window.downloadTweetAsImage && window.downloadTweetAsImage('${tweetId}')" title="Download as image">
@@ -269,9 +832,10 @@
                 </svg>
                 Download
             </button>
-            <img src="./branding.png" alt="Brand Logo" class="branding-logo" crossorigin="anonymous">
+            <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/branding-qG2PR5dddQAQpBWampKOJneXPqh9JO.png" alt="Brand Logo" class="branding-logo" crossorigin="anonymous">
         `;
     }
+    
     function renderTweetCard(tweet) {
         const user = getUser(tweet);
         const avatar = getAvatar(user);
@@ -279,7 +843,9 @@
         const username = getUsername(user, tweet);
         const verification = getVerification(user);
         const timestamp = getTimestamp(tweet);
-        const media = getMedia(tweet);
+        const mediaArray = getMedia(tweet);
+        const quotedTweet = getQuotedTweet(tweet);
+        
         return `
         <div class="tweet-card" data-tweet-id="${tweet.id}">
             ${renderTopRightElements(tweet.id)}
@@ -293,7 +859,8 @@
                         <span class="timestamp">· ${timestamp}</span>
                     </div>
                     <div class="tweet-content">${formatContent(tweet.content || tweet.text || '')}</div>
-                    ${media ? `<div class="media-container"><img src="${getMediaUrl(media)}" alt="media" class="tweet-image" crossorigin="anonymous"></div>` : ''}
+                    ${renderMediaContainer(mediaArray)}
+                    ${renderQuotedTweet(quotedTweet)}
                     <div class="tweet-actions">
                         <button class="action-button"><svg class="action-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01z"/></svg> <span>${tweet.engagement?.replies ?? tweet.public_metrics?.reply_count ?? 0}</span></button>
                         <button class="action-button"><svg class="action-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2z"/></svg> <span>${tweet.engagement?.retweets ?? tweet.public_metrics?.retweet_count ?? 0}</span></button>
@@ -305,6 +872,7 @@
         </div>
         `;
     }
+    
     // Download as image (for browser, not used by puppeteer)
     window.downloadTweetAsImage = async function(tweetId) {
         const tweetElement = document.querySelector(`[data-tweet-id="${tweetId}"]`);
@@ -335,14 +903,16 @@
         link.click();
         document.body.removeChild(link);
     };
+    
     // Expose a function to render the tweet card from window.tweetData
     window.renderTweet = function(tweetData) {
         document.getElementById('tweet-container').innerHTML = renderTweetCard(tweetData);
     };
+    
     // If window.tweetData is set, render immediately
     if (window.tweetData) {
         window.renderTweet(window.tweetData);
     }
     </script>
 </body>
-</html> 
+</html>

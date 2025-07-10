@@ -2,6 +2,7 @@ import { TwitterApi } from 'twitter-api-v2';
 import { twitterConfig, botConfig } from '../config';
 import logger from '../utils/logger';
 import { TwitterMention, TwitterTweet, TwitterUser, TwitterMedia } from '../types';
+import databaseService from './database';
 
 class TwitterService {
   private client: TwitterApi;
@@ -118,7 +119,7 @@ class TwitterService {
     return this.botUserId;
   }
 
-  async getMentions(): Promise<TwitterMention[]> {
+  async getMentions(sinceTime?: Date): Promise<TwitterMention[]> {
     return this.makeRateLimitedRequest(async () => {
       // Use cached bot user ID
       const botUserId = await this.getBotUserId();
@@ -131,12 +132,36 @@ class TwitterService {
         expansions: ['author_id', 'referenced_tweets.id', 'referenced_tweets.id.author_id'],
       };
 
-      // Only add since_id if we have a last mention ID
-      if (this.lastMentionId) {
-        params.since_id = this.lastMentionId;
-        logger.info('Using since_id filter', { since_id: this.lastMentionId });
+      // Get the latest tweet timestamp from database (if not provided)
+      const latestTweetTime = sinceTime ? null : await databaseService.getLatestTweetTimestamp();
+      const latestMentionTime = sinceTime ? null : await databaseService.getLatestMentionTimestamp();
+      
+      // Use the most recent timestamp between tweet creation and mention processing
+      const effectiveSinceTime = sinceTime || (latestTweetTime && latestMentionTime 
+        ? new Date(Math.max(new Date(latestTweetTime).getTime(), new Date(latestMentionTime).getTime()))
+        : latestTweetTime 
+          ? new Date(latestTweetTime)
+          : latestMentionTime 
+            ? new Date(latestMentionTime)
+            : null);
+
+      if (effectiveSinceTime) {
+        // Add since_id if we have a last mention ID (fallback)
+        if (this.lastMentionId) {
+          params.since_id = this.lastMentionId;
+          logger.info('Using since_id filter as fallback', { since_id: this.lastMentionId });
+        } else {
+          // Use start_time for more precise filtering
+          params.start_time = effectiveSinceTime.toISOString();
+          logger.info('Using start_time filter from database', { 
+            start_time: params.start_time,
+            latestTweetTime,
+            latestMentionTime,
+            providedSinceTime: sinceTime?.toISOString()
+          });
+        }
       } else {
-        logger.info('No since_id filter - getting all recent mentions');
+        logger.info('No database timestamp found - getting all recent mentions');
       }
 
       logger.info('Making userMentionTimeline API call with params:', params);
@@ -222,7 +247,13 @@ class TwitterService {
           'tweet.fields': ['created_at', 'author_id', 'public_metrics', 'referenced_tweets', 'attachments'],
           'user.fields': ['username', 'name', 'profile_image_url', 'verified'],
           'media.fields': ['url', 'preview_image_url', 'type', 'width', 'height', 'alt_text'],
-          expansions: ['author_id', 'attachments.media_keys', 'referenced_tweets.id'],
+          expansions: [
+            'author_id', 
+            'attachments.media_keys', 
+            'referenced_tweets.id',
+            'referenced_tweets.id.author_id',
+            'referenced_tweets.id.attachments.media_keys'
+          ] as any,
         });
 
         if (!tweet.data) {
@@ -291,11 +322,65 @@ class TwitterService {
           }));
         }
 
+        // Add referenced tweets information (for quoted tweets)
+        if (tweet.data.referenced_tweets && tweet.data.referenced_tweets.length > 0) {
+          twitterTweet.referenced_tweets = tweet.data.referenced_tweets;
+        }
+
+        // Add includes for quoted tweets
+        if (tweet.includes) {
+          twitterTweet.includes = {
+            users: tweet.includes.users || [],
+            media: (tweet.includes.media || []).map((media: any) => ({
+              media_key: media.media_key,
+              type: media.type as 'photo' | 'video' | 'animated_gif',
+              url: media.url,
+              preview_image_url: media.preview_image_url,
+              width: media.width,
+              height: media.height,
+              alt_text: media.alt_text,
+            })),
+            tweets: (tweet.includes.tweets || []).map((tweetData: any) => {
+              const mappedTweet: TwitterTweet = {
+                id: tweetData.id,
+                text: tweetData.text,
+                author_id: tweetData.author_id || '',
+                created_at: tweetData.created_at || new Date().toISOString(),
+              };
+              
+              if (tweetData.public_metrics) {
+                mappedTweet.public_metrics = {
+                  retweet_count: tweetData.public_metrics.retweet_count || 0,
+                  reply_count: tweetData.public_metrics.reply_count || 0,
+                  like_count: tweetData.public_metrics.like_count || 0,
+                  quote_count: tweetData.public_metrics.quote_count || 0,
+                };
+              }
+              
+              if (tweetData.author) {
+                mappedTweet.author = tweetData.author;
+              }
+              
+              if (tweetData.media) {
+                mappedTweet.media = tweetData.media;
+              }
+              
+              return mappedTweet;
+            })
+          };
+        }
+
         logger.info('Retrieved tweet', { 
           tweetId, 
           authorId: twitterTweet.author_id,
           textLength: twitterTweet.text.length,
-          hasAuthorInfo: !!twitterTweet.author
+          hasAuthorInfo: !!twitterTweet.author,
+          hasReferencedTweets: !!twitterTweet.referenced_tweets,
+          hasIncludes: !!twitterTweet.includes,
+          referencedTweetsCount: twitterTweet.referenced_tweets?.length || 0,
+          includesUsersCount: twitterTweet.includes?.users?.length || 0,
+          includesTweetsCount: twitterTweet.includes?.tweets?.length || 0,
+          includesMediaCount: twitterTweet.includes?.media?.length || 0
         });
 
         return twitterTweet;
@@ -423,6 +508,9 @@ class TwitterService {
       try {
         const mentions = await this.getMentions();
         console.log('mentions:', mentions);
+        for (const mention of mentions) {
+            console.log('tweet:', mention.referenced_tweets);
+        }
         // Pass all mentions at once for batch processing
         await callback(mentions.reverse());
       } catch (error) {

@@ -1,5 +1,5 @@
 import path from 'path';
-import fs from 'fs/promises';
+import fs, { truncate } from 'fs/promises';
 import { ScreenshotResult, ScreenshotOptions, TwitterTweet } from '../types';
 import { botConfig } from '../config';
 import logger from '../utils/logger';
@@ -21,7 +21,7 @@ class ScreenshotService {
       const templateHtml = await fs.readFile(this.TEMPLATE_PATH, 'utf8');
       // Launch Puppeteer with proper settings for image loading
       const browser = await puppeteer.launch({ 
-        headless: false,
+        headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

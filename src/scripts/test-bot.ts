@@ -60,25 +60,40 @@ async function testBotFlow() {
 
     logger.info('Testing bot flow with simulated data...');
 
-    // Test 1: Quota check
-    logger.info('Test 1: Checking quota...');
-    const quotaCheck = await quotaService.checkUserQuota(sampleRequester.username);
+    // Test 1: Store tweet data
+    logger.info('Test 1: Storing tweet data...');
+    await databaseService.storeTweet({
+      tweet_id: sampleTweet.id,
+      author_id: sampleTweet.author_id,
+      text: sampleTweet.text,
+      created_at: sampleTweet.created_at,
+      public_metrics: sampleTweet.public_metrics,
+      author_data: sampleAuthor,
+      media_data: [],
+      referenced_tweets: [],
+      includes_data: null
+    });
+    logger.info('✅ Tweet data stored');
+
+    // Test 2: Quota check
+    logger.info('Test 2: Checking quota...');
+    const quotaCheck = await quotaService.checkUserQuota(sampleRequester.id);
     logger.info('Quota check result', { quotaCheck });
 
     // Get the actual user from database (with proper UUID)
-    const user = await databaseService.getUserByTwitterHandle(sampleRequester.username);
+    const user = await databaseService.getOrCreateUser(sampleRequester.id);
     if (!user) {
       throw new Error('User not found in database after quota check');
     }
 
-    // Test 2: Screenshot generation
-    logger.info('Test 2: Taking screenshot...');
-    const screenshotResult = await screenshotService.takeScreenshot(sampleTweet, sampleAuthor, {
-      width: 600,
-      height: 400,
-      quality: 80,
-      format: 'jpeg',
-    });
+    // Test 3: Update tweet processing status
+    logger.info('Test 3: Updating tweet processing status...');
+    await databaseService.updateTweetProcessingStatus(sampleTweet.id, 'processing');
+    logger.info('✅ Tweet status updated to processing');
+
+    // Test 4: Screenshot generation
+    logger.info('Test 4: Taking screenshot...');
+    const screenshotResult = await screenshotService.takeScreenshot(sampleTweet);
 
     if (!screenshotResult.success || !screenshotResult.buffer) {
       throw new Error(`Screenshot failed: ${screenshotResult.error}`);
@@ -89,8 +104,8 @@ async function testBotFlow() {
       sizeKB: (screenshotResult.buffer.length / 1024).toFixed(2),
     });
 
-    // Test 3: Arweave upload
-    logger.info('Test 3: Uploading to Arweave...');
+    // Test 5: Arweave upload
+    logger.info('Test 5: Uploading to Arweave...');
     const uploadResult = await arweaveService.uploadScreenshot(
       screenshotResult,
       sampleTweet.id,
@@ -107,8 +122,13 @@ async function testBotFlow() {
       url: arweaveService.generateArweaveUrl(uploadResult.id),
     });
 
-    // Test 4: Message generation
-    logger.info('Test 4: Generating reply message...');
+    // Test 6: Update tweet processing status to completed
+    logger.info('Test 6: Updating tweet processing status to completed...');
+    await databaseService.updateTweetProcessingStatus(sampleTweet.id, 'completed', uploadResult.id);
+    logger.info('✅ Tweet status updated to completed');
+
+    // Test 7: Message generation
+    logger.info('Test 7: Generating reply message...');
     const successMessage = arweaveService.generateUploadMessage(
       uploadResult.id,
       sampleTweet.id,
@@ -125,24 +145,24 @@ async function testBotFlow() {
       errorMessage: errorMessage.substring(0, 100) + '...',
     });
 
-    // Test 5: Quota increment
-    logger.info('Test 5: Incrementing quota...');
-    await quotaService.incrementUserQuota(sampleRequester.username);
+    // Test 8: Quota increment
+    logger.info('Test 8: Incrementing quota...');
+    await quotaService.incrementUserQuota(sampleRequester.id);
     logger.info('✅ Quota incremented');
 
-    // Test 6: Usage logging
-    logger.info('Test 6: Logging usage...');
+    // Test 9: Usage logging
+    logger.info('Test 9: Logging usage...');
     await databaseService.logUsage({
-      user_id: user.id,
+      user_id: sampleRequester.id, // Use author_id for logUsage
       tweet_id: sampleTweet.id,
       event_type: 'success',
       arweave_id: uploadResult.id,
     });
     logger.info('✅ Usage logged');
 
-    // Test 7: Get quota status
-    logger.info('Test 7: Getting quota status...');
-    const quotaStatus = await quotaService.getQuotaStatus(sampleRequester.username);
+    // Test 10: Get quota status
+    logger.info('Test 10: Getting quota status...');
+    const quotaStatus = await quotaService.getQuotaStatus(sampleRequester.id);
     logger.info('Quota status', { quotaStatus });
 
     // Cleanup
