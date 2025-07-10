@@ -11,6 +11,7 @@
     "test-twitter": "ts-node src/scripts/test-twitter.ts",
     "test-quoted-tweets": "ts-node src/scripts/test-quoted-tweets.ts",
     "test-screenshot": "ts-node src/scripts/test-screenshot.ts",
+    "test-ao-upload": "ts-node src/scripts/test-ao-upload.ts",
     "test-arweave": "ts-node src/scripts/test-arweave.ts",
     "test-integration": "ts-node src/scripts/test-integration.ts",
     "test-bot": "ts-node src/scripts/test-bot.ts",
@@ -38,6 +39,7 @@
   },
   "dependencies": {
     "@ardrive/turbo-sdk": "^1.28.3",
+    "@permaweb/aoconnect": "^0.0.85",
     "@types/pg": "^8.15.4",
     "canvas": "^3.1.2",
     "dotenv": "^16.5.0",

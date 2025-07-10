@@ -11,6 +11,9 @@ importers:
       '@ardrive/turbo-sdk':
         specifier: ^1.28.3
         version: 1.28.3(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)
+      '@permaweb/aoconnect':
+        specifier: ^0.0.85
+        version: 0.0.85(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       '@types/pg':
         specifier: ^8.15.4
         version: 8.15.4
@@ -344,6 +347,13 @@ packages:
   '@permaweb/aoconnect@0.0.57':
     resolution: {integrity: sha512-l1+47cZuQ8pOIMOdRXymcegCmefXjqR8Bc2MY6jIzWv9old/tG6mfCue2W1QviGyhjP3zEVQgr7YofkY2lq35Q==}
     engines: {node: '>=18', yarn: please-use-npm}
+
+  '@permaweb/aoconnect@0.0.85':
+    resolution: {integrity: sha512-lPfDLDaQyOY1oupxkw9B9ZslKw1ENASEdzComoMc2RZ7DejBx2OdHzU+fmZO1ZEQ5zQSm82/wgRVBd/1l6092g==}
+    engines: {node: '>=18'}
+
+  '@permaweb/protocol-tag-utils@0.0.2':
+    resolution: {integrity: sha512-2IiKu71W7pkHKIzxabCGQ5q8DSppZaE/sPcPF2hn+OWwfe04M7b5X5LHRXQNPRuxHWuioieGdPQb3F7apOlffQ==}
 
   '@pkgr/core@0.2.7':
     resolution: {integrity: sha512-YLT9Zo3oNPJoBjBc4q8G2mjU4tqIbf5CEOORbUUr48dCD9q3umJ3IPlVqOqDakPfd2HuwccBaqlGhN4Gmr5OWg==}
@@ -1205,6 +1215,9 @@ packages:
   html-to-image@1.11.13:
     resolution: {integrity: sha512-cuOPoI7WApyhBElTTb9oqsawRvZ0rHhaHwghRLlTuffoD1B2aDemlCruLeZrUIIdvG7gs9xeELEPm6PhuASqrg==}
 
+  http-message-signatures@1.0.4:
+    resolution: {integrity: sha512-gavCQWnxHFg0BVlKs6CmYK7hNSH1o0x0mHTC68yBAHYOYuTVXPv52mEE7QuT5TenfiagTdOa/zPJzen4lEX7Rg==}
+
   http-proxy-agent@7.0.2:
     resolution: {integrity: sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig==}
     engines: {node: '>= 14'}
@@ -1846,6 +1859,14 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
+  structured-headers@1.0.1:
+    resolution: {integrity: sha512-QYBxdBtA4Tl5rFPuqmbmdrS9kbtren74RTJTcs0VSQNVV5iRhJD4QlYTLD0+81SBwUQctjEQzjTRI3WG4DzICA==}
+    engines: {node: '>= 14', npm: '>=6'}
+
+  structured-headers@2.0.1:
+    resolution: {integrity: sha512-6Rob3q8opLyWHNCPeDFZU9CmrxOWzfvYUnOPE6SWXtcqI1DqQKx39CqKuQq+WsyuLNOkKvz5rQ/54ycAMU6qOg==}
+    engines: {node: '>=18', npm: '>=6'}
+
   superstruct@2.0.2:
     resolution: {integrity: sha512-uV+TFRZdXsqXTL2pRvujROjdZQ4RAlBUS5BTh9IGm+jTqQntYThciG/qu57Gs69yjnVUSqdxF9YLmSnpupBW9A==}
     engines: {node: '>=14.0.0'}
@@ -2162,7 +2183,7 @@ snapshots:
       '@permaweb/aoconnect': 0.0.57
       '@solana/web3.js': 1.98.2(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)
       arweave: 1.15.7
-      axios: 1.10.0
+      axios: 1.10.0(debug@4.4.1)
       axios-retry: 3.9.1
       bignumber.js: 9.3.0
       bs58: 5.0.0
@@ -2274,7 +2295,7 @@ snapshots:
       '@cosmjs/socket': 0.33.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       '@cosmjs/stream': 0.33.1
       '@cosmjs/utils': 0.33.1
-      axios: 1.10.0
+      axios: 1.10.0(debug@4.4.1)
       readonly-date: 1.0.0
       xstream: 11.14.0
     transitivePeerDependencies:
@@ -2657,6 +2678,29 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@permaweb/aoconnect@0.0.85(bufferutil@4.0.9)(utf-8-validate@5.0.10)':
+    dependencies:
+      '@dha-team/arbundles': 1.0.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      '@permaweb/ao-scheduler-utils': 0.0.25
+      '@permaweb/protocol-tag-utils': 0.0.2
+      axios: 1.10.0(debug@4.4.1)
+      base64url: 3.0.1
+      buffer: 6.0.3
+      debug: 4.4.1(supports-color@5.5.0)
+      http-message-signatures: 1.0.4
+      hyper-async: 1.1.2
+      mnemonist: 0.39.8
+      ramda: 0.30.1
+      structured-headers: 2.0.1
+      zod: 3.25.67
+    transitivePeerDependencies:
+      - bufferutil
+      - encoding
+      - supports-color
+      - utf-8-validate
+
+  '@permaweb/protocol-tag-utils@0.0.2': {}
+
   '@pkgr/core@0.2.7': {}
 
   '@puppeteer/browsers@2.10.5':
@@ -3001,9 +3045,9 @@ snapshots:
       '@babel/runtime': 7.27.6
       is-retry-allowed: 2.2.0
 
-  axios@1.10.0:
+  axios@1.10.0(debug@4.4.1):
     dependencies:
-      follow-redirects: 1.15.9
+      follow-redirects: 1.15.9(debug@4.4.1)
       form-data: 4.0.3
       proxy-from-env: 1.1.0
     transitivePeerDependencies:
@@ -3516,7 +3560,9 @@ snapshots:
 
   fn.name@1.1.0: {}
 
-  follow-redirects@1.15.9: {}
+  follow-redirects@1.15.9(debug@4.4.1):
+    optionalDependencies:
+      debug: 4.4.1(supports-color@5.5.0)
 
   form-data@4.0.3:
     dependencies:
@@ -3636,6 +3682,10 @@ snapshots:
       minimalistic-crypto-utils: 1.0.1
 
   html-to-image@1.11.13: {}
+
+  http-message-signatures@1.0.4:
+    dependencies:
+      structured-headers: 1.0.1
 
   http-proxy-agent@7.0.2:
     dependencies:
@@ -4330,6 +4380,10 @@ snapshots:
   strip-json-comments@2.0.1: {}
 
   strip-json-comments@3.1.1: {}
+
+  structured-headers@1.0.1: {}
+
+  structured-headers@2.0.1: {}
 
   superstruct@2.0.2: {}
 

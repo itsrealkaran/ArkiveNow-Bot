@@ -20,7 +20,7 @@ async function testQuotedTweets() {
     // Note: You'll need to replace this with a real tweet ID that quotes another tweet
     const simulatedMention: TwitterMention = {
       id: '9999999999999999999',
-      text: '@permasnap screenshot https://twitter.com/testuser/status/1234567890123456789',
+      text: '@arkivenow screenshot https://twitter.com/testuser/status/1234567890123456789',
       author_id: '1111111111111111111',
       created_at: new Date().toISOString(),
       author: {

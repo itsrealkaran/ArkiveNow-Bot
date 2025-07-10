@@ -25,7 +25,7 @@ async function testBotFlow() {
     // Create a simulated mention
     const simulatedMention: TwitterMention = {
       id: '9999999999999999999',
-      text: '@permasnap screenshot https://twitter.com/testuser/status/1234567890123456789',
+      text: '@arkivenow screenshot https://twitter.com/testuser/status/1234567890123456789',
       author_id: '1111111111111111111',
       created_at: new Date().toISOString(),
     };
@@ -33,7 +33,7 @@ async function testBotFlow() {
     // Create sample tweet and author
     const sampleTweet: TwitterTweet = {
       id: '1234567890123456789',
-      text: 'This is a test tweet for bot flow verification! 🚀 #PermaSnap #Testing',
+      text: 'This is a test tweet for bot flow verification! 🚀 #arkivenow #Testing',
       author_id: '2222222222222222222',
       created_at: new Date().toISOString(),
       public_metrics: {

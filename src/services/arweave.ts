@@ -1,4 +1,5 @@
 import { uploadFileTurbo, createArweaveFileData } from '../utils/turbo';
+import { uploadFileAO, shouldUseAOUpload, formatFileSize } from '../utils/aoupload';
 import { ArweaveUploadResult, ScreenshotResult } from '../types';
 import logger from '../utils/logger';
 
@@ -32,35 +33,73 @@ class ArweaveService {
       const title = `Tweet Screenshot - @${authorUsername}`;
       const description = `Screenshot of tweet by @${authorUsername}: ${this.truncateText(tweetText, 200)}`;
 
-      // Create file data
-      const fileData = createArweaveFileData(
-        screenshotResult.buffer,
-        filename,
-        'image/jpeg',
-        title,
-        description
-      );
-
-      logger.info('Uploading screenshot to Arweave', {
+      const fileSize = screenshotResult.buffer.length;
+      const formattedSize = formatFileSize(fileSize);
+      
+      logger.info('Preparing screenshot upload', {
         tweetId,
         authorUsername,
         filename,
-        size: screenshotResult.buffer.length,
+        size: fileSize,
+        formattedSize,
+        useAO: shouldUseAOUpload(fileSize)
       });
 
-      // Upload to Arweave
-      const result = await uploadFileTurbo(fileData);
+      let result: ArweaveUploadResult;
+
+      // Check if we should use AO upload for larger files
+      if (shouldUseAOUpload(fileSize)) {
+        logger.info('Using AO upload for large file', {
+          tweetId,
+          size: formattedSize,
+          threshold: '100KB'
+        });
+
+        // Use AO upload for larger files
+        const aoResult = await uploadFileAO(
+          screenshotResult.buffer,
+          filename,
+          'image/jpeg',
+          title,
+          description
+        );
+
+        result = {
+          success: aoResult.success,
+          ...(aoResult.id && { id: aoResult.id }),
+          ...(aoResult.error && { error: aoResult.error })
+        };
+      } else {
+        logger.info('Using Turbo upload for small file', {
+          tweetId,
+          size: formattedSize
+        });
+
+        // Use Turbo upload for smaller files
+        const fileData = createArweaveFileData(
+          screenshotResult.buffer,
+          filename,
+          'image/jpeg',
+          title,
+          description
+        );
+
+        result = await uploadFileTurbo(fileData);
+      }
 
       if (result.success && result.id) {
         logger.info('Screenshot uploaded to Arweave successfully', {
           tweetId,
           arweaveId: result.id,
           filename,
+          method: shouldUseAOUpload(fileSize) ? 'AO' : 'Turbo',
+          size: formattedSize
         });
       } else {
         logger.error('Failed to upload screenshot to Arweave', {
           tweetId,
           error: result.error,
+          method: shouldUseAOUpload(fileSize) ? 'AO' : 'Turbo'
         });
       }
 
@@ -89,31 +128,71 @@ class ArweaveService {
     description?: string
   ): Promise<ArweaveUploadResult> {
     try {
-      const fileData = createArweaveFileData(
-        buffer,
+      const fileSize = buffer.length;
+      const formattedSize = formatFileSize(fileSize);
+      
+      logger.info('Preparing file upload', {
         filename,
         contentType,
-        title,
-        description
-      );
-
-      logger.info('Uploading file to Arweave', {
-        filename,
-        contentType,
-        size: buffer.length,
+        size: fileSize,
+        formattedSize,
+        useAO: shouldUseAOUpload(fileSize)
       });
 
-      const result = await uploadFileTurbo(fileData);
+      let result: ArweaveUploadResult;
+
+      // Check if we should use AO upload for larger files
+      if (shouldUseAOUpload(fileSize)) {
+        logger.info('Using AO upload for large file', {
+          filename,
+          size: formattedSize,
+          threshold: '100KB'
+        });
+
+        // Use AO upload for larger files
+        const aoResult = await uploadFileAO(
+          buffer,
+          filename,
+          contentType,
+          title || filename,
+          description || 'File uploaded to Arweave'
+        );
+
+        result = {
+          success: aoResult.success,
+          ...(aoResult.id && { id: aoResult.id }),
+          ...(aoResult.error && { error: aoResult.error })
+        };
+      } else {
+        logger.info('Using Turbo upload for small file', {
+          filename,
+          size: formattedSize
+        });
+
+        // Use Turbo upload for smaller files
+        const fileData = createArweaveFileData(
+          buffer,
+          filename,
+          contentType,
+          title,
+          description
+        );
+
+        result = await uploadFileTurbo(fileData);
+      }
 
       if (result.success && result.id) {
         logger.info('File uploaded to Arweave successfully', {
           filename,
           arweaveId: result.id,
+          method: shouldUseAOUpload(fileSize) ? 'AO' : 'Turbo',
+          size: formattedSize
         });
       } else {
         logger.error('Failed to upload file to Arweave', {
           filename,
           error: result.error,
+          method: shouldUseAOUpload(fileSize) ? 'AO' : 'Turbo'
         });
       }
 
@@ -139,15 +218,43 @@ class ArweaveService {
   }
 
   /**
-   * Generate a user-friendly message with Arweave link
+   * Generate a user-friendly, dynamic message with Arweave link (ArkiveNow penguin style)
    */
   generateUploadMessage(
     arweaveId: string,
     tweetId: string,
-    authorId: string
+    authorUsername: string
   ): string {
     const arweaveUrl = this.generateArweaveUrl(arweaveId);
-    return `Tweet by user ${authorId} has been preserved on Arweave.\n\n🔗 View: ${arweaveUrl}\n\n#PermaSnap #Arweave`;
+
+    // Dynamic intros with username personalization
+    const intros = [
+      `🐧 Chill @${authorUsername}! Your tweet is now safe in the Arkive.`,
+      `❄️ Ice cold @${authorUsername}! This moment is now frozen forever.`,
+      `🧊 Penguin-approved preservation complete for @${authorUsername}.`,
+      `📦 @${authorUsername}, your tweet has been packed in the ArkiveNow icebox.`,
+      `🐧 The ArkiveNow penguin has archived @${authorUsername}'s tweet.`,
+      `🐧 @${authorUsername}, your memory is now on ice—permanently!`,
+      `❄️ The penguin has slid @${authorUsername}'s tweet into the vault.`,
+      `🧊 Another tweet from @${authorUsername}, perfectly preserved by ArkiveNow.`,
+    ];
+
+    // Dynamic outros
+    const outros = [
+      `Stay frosty @${authorUsername}. #ArkiveNow #Arweave`,
+      `Another memory from @${authorUsername}, perfectly preserved. #ArkiveNow`,
+      `Cool moves @${authorUsername}. Your tweet is now immortal. #ArkiveNow`,
+      `The penguin never forgets @${authorUsername}. #ArkiveNow`,
+      `Glide on @${authorUsername}, your tweet is safe. #ArkiveNow`,
+      `Keep it cool @${authorUsername}. #ArkiveNow`,
+      `Preserved with penguin precision for @${authorUsername}. #ArkiveNow`,
+    ];
+
+    // Pick random intro and outro
+    const intro = intros[Math.floor(Math.random() * intros.length)];
+    const outro = outros[Math.floor(Math.random() * outros.length)];
+
+    return `${intro}\n\n🔗 [View on Arweave](${arweaveUrl})\n\n${outro}`;
   }
 
   /**

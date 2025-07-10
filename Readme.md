@@ -76,7 +76,7 @@ TWITTER_ACCESS_SECRET=your_access_secret
 ARWEAVE_WALLET_PATH=./arweave-wallet.json
 
 # Bot Configuration
-BOT_USERNAME=permasnap
+BOT_USERNAME=arkivenow
 POLLING_INTERVAL=30000
 MAX_DAILY_REQUESTS=10
 MAX_MONTHLY_REQUESTS=100
@@ -89,7 +89,7 @@ MAX_MONTHLY_REQUESTS=100
 1. **Mention the bot** with a tweet URL:
 
    ```
-   @permasnap screenshot https://twitter.com/username/status/1234567890123456789
+   @arkivenow screenshot https://twitter.com/username/status/1234567890123456789
    ```
 
 2. **The bot will:**
@@ -101,9 +101,9 @@ MAX_MONTHLY_REQUESTS=100
 
 ### Supported Commands
 
-- `@permasnap screenshot <tweet_url>` - Take screenshot of a tweet
-- `@permasnap help` - Show help message
-- `@permasnap status` - Check your quota status
+- `@arkivenow screenshot <tweet_url>` - Take screenshot of a tweet
+- `@arkivenow help` - Show help message
+- `@arkivenow status` - Check your quota status
 
 ## API Reference
 

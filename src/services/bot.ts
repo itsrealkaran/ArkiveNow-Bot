@@ -1,4 +1,4 @@
-import { TwitterMention, TwitterTweet, QuotaCheck } from '../types';
+import { TwitterMention, TwitterTweet, TwitterUser, BotResponse, QuotaCheck } from '../types';
 import { TweetParser, ParsedMention } from '../utils/tweetParser';
 import twitterService from './twitter';
 import screenshotService from './screenshot';
@@ -32,12 +32,10 @@ class BotService {
    * Process a batch of mentions
    */
   async processMentionsBatch(mentions: TwitterMention[]): Promise<void> {
-    // Step 1: Collect all relevant tweet IDs (including quoted tweets)
+    // Step 1: Collect all relevant tweet IDs
     const mentionToTweetId: { [mentionId: string]: string } = {};
-    
     for (const mention of mentions) {
       if (!mention.id) continue; // skip if mention.id is undefined
-      
       // Upsert user info in DB if author info is available
       if (mention.author) {
         const userUpsert: any = { author_id: mention.author.id };
@@ -47,99 +45,28 @@ class BotService {
         if (mention.author.verified !== undefined) userUpsert.verified = mention.author.verified;
         await databaseService.upsertUserByAuthorId(userUpsert);
       }
-      
       let tweetId = twitterService.extractParentTweetId(mention);
       if (!tweetId) {
         const parsed = TweetParser.parseMention(mention);
         tweetId = parsed.tweetId || '';
       }
-      
       if (tweetId && tweetId !== '') {
         mentionToTweetId[mention.id] = tweetId;
       }
     }
-    
     const uniqueTweetIds = Array.from(new Set(Object.values(mentionToTweetId)));
     if (!uniqueTweetIds.length) {
       logger.warn('No valid tweet references found in batch');
       return;
     }
 
-    // Step 2: Batch fetch main tweets (with rate limiting handled by Twitter service)
-    logger.info('Fetching main tweets', { tweetIds: uniqueTweetIds });
+    // Step 2: Batch fetch tweets
     const tweets = await twitterService.getTweetsByIds(uniqueTweetIds);
     console.log('tweets:', tweets);
-    for (const tweet of tweets) {
-      console.log('tweet:', tweet.referenced_tweets);
-    }
-    logger.info('Batch fetched main tweets', { tweetIds: uniqueTweetIds, count: tweets.length });
-    
-    // Step 3: Check if main tweets are quoted tweets and collect original tweet IDs
-    const originalTweetIds: Set<string> = new Set();
-    const quotedMainTweets: Map<string, string> = new Map(); // mainTweetId -> originalTweetId
-    
-    for (const tweet of tweets) {
-      if (tweet.referenced_tweets) {
-        for (const ref of tweet.referenced_tweets) {
-          if (ref.type === 'quoted') {
-            // This main tweet is quoting another tweet
-            originalTweetIds.add(ref.id);
-            quotedMainTweets.set(tweet.id, ref.id);
-          }
-        }
-      }
-    }
-    
-    // Step 4: Fetch original tweets that are being quoted (with rate limiting handled by Twitter service)
-    let originalTweets: TwitterTweet[] = [];
-    if (originalTweetIds.size > 0) {
-      const originalTweetIdsArray = Array.from(originalTweetIds);
-      logger.info('Found quoted tweets - fetching original tweets', { 
-        quotedTweetCount: originalTweetIdsArray.length,
-        originalTweetIds: originalTweetIdsArray 
-      });
-      
-      // The Twitter service handles rate limiting automatically
-      originalTweets = await twitterService.getTweetsByIds(originalTweetIdsArray);
-      console.log('originalTweets:', originalTweets);
-      logger.info('Fetched original tweets', { 
-        requested: originalTweetIdsArray.length,
-        received: originalTweets.length,
-        missing: originalTweetIdsArray.length - originalTweets.length
-      });
-    }
-    
-    // Step 5: Create combined tweet map
+    logger.info('Batch fetched tweets', { tweetIds: uniqueTweetIds, tweets });
     const tweetMap = new Map(tweets.map(tweet => [tweet.id, tweet]));
-    const originalTweetMap = new Map(originalTweets.map(tweet => [tweet.id, tweet]));
-    
-    // Step 6: Enhance main tweets with original tweet data (the tweets they're quoting)
-    for (const tweet of tweets) {
-      const originalTweetId = quotedMainTweets.get(tweet.id);
-      if (originalTweetId) {
-        const originalTweet = originalTweetMap.get(originalTweetId);
-        if (originalTweet) {
-          // Add original tweet to the main tweet's includes
-          if (!tweet.includes) {
-            tweet.includes = { users: [], media: [], tweets: [] };
-          }
-          tweet.includes.tweets = [originalTweet];
-          
-          // Also add original tweet author to includes.users
-          if (originalTweet.author && tweet.includes.users) {
-            tweet.includes.users.push(originalTweet.author);
-          }
-        }
-      }
-    }
 
-    // Step 7: Process each mention with its corresponding tweet
-    logger.info('Processing mentions with enhanced tweet data', { 
-      mentionCount: mentions.length,
-      mainTweetCount: tweets.length,
-      originalTweetCount: originalTweets.length
-    });
-    
+    // Step 3: Process each mention with its corresponding tweet
     for (const mention of mentions) {
       const tweetId = mentionToTweetId[mention.id];
       if (!tweetId || tweetId === '') {
@@ -154,14 +81,25 @@ class BotService {
         continue;
       }
       
-      // Log if this tweet has original tweets (the tweets it's quoting)
-      if (tweet.includes?.tweets && tweet.includes.tweets.length > 0) {
-        logger.info('Processing mention with original tweets (quoted content)', {
-          mentionId: mention.id,
-          tweetId: tweet.id,
-          originalTweetCount: tweet.includes.tweets.length,
-          originalTweetIds: tweet.includes.tweets.map(ot => ot.id)
+      // Store tweet data for each request (allows multiple users to archive same tweet)
+      try {
+        await databaseService.storeTweet({
+          tweet_id: tweet.id,
+          author_id: tweet.author_id,
+          text: tweet.text,
+          created_at: tweet.created_at,
+          public_metrics: tweet.public_metrics,
+          author_data: tweet.author,
+          media_data: tweet.media,
+          referenced_tweets: tweet.referenced_tweets,
+          includes_data: tweet.includes
         });
+        
+        // Update processing status to processing
+        await databaseService.updateTweetProcessingStatus(tweet.id, 'processing');
+      } catch (error) {
+        logger.error('Failed to store tweet data', { tweetId: tweet.id, error });
+        // Continue processing even if storage fails
       }
       
       await this.processMentionWithTweet(mention, tweet);
@@ -184,28 +122,6 @@ class BotService {
         text: mention.text,
         tweetId: tweet.id
       });
-
-      // Step 1.5: Store tweet data in database
-      try {
-        await databaseService.storeTweet({
-          tweet_id: tweet.id,
-          author_id: tweet.author_id,
-          text: tweet.text,
-          created_at: tweet.created_at,
-          public_metrics: tweet.public_metrics,
-          author_data: tweet.author,
-          media_data: tweet.media,
-          referenced_tweets: tweet.referenced_tweets,
-          includes_data: tweet.includes
-        });
-        
-        // Update processing status to processing
-        await databaseService.updateTweetProcessingStatus(tweet.id, 'processing');
-      } catch (error) {
-        logger.error('Failed to store tweet data', { tweetId: tweet.id, error });
-        // Continue processing even if storage fails
-      }
-
       // Step 2: Check user quota using author_id
       const quotaCheck = await quotaService.checkUserQuota(mention.author_id);
       if (!quotaCheck.allowed) {
@@ -243,16 +159,16 @@ class BotService {
       // Step 8: Update tweet processing status to completed
       await databaseService.updateTweetProcessingStatus(tweet.id, 'completed', uploadResult.id);
       
-      // Step 9: Log successful usage with mention timestamp
+      // Step 9: Log successful usage
       await databaseService.logUsage({
         user_id: mention.author_id,
         tweet_id: tweet.id,
         event_type: 'success',
         arweave_id: uploadResult.id,
       });
-      
       // Step 10: Reply with success message
-      // await this.handleSuccess(mention, uploadResult.id, tweet.id, tweet.author_id, screenshotResult.buffer);
+      const authorUsername = tweet.author?.username || tweet.author_id;
+      await this.handleSuccess(mention, uploadResult.id, tweet.id, authorUsername, screenshotResult.buffer);
       logger.info('Successfully processed mention', {
         mentionId: mention.id,
         tweetId: tweet.id,
@@ -275,11 +191,11 @@ class BotService {
     mention: TwitterMention,
     arweaveId: string,
     tweetId: string,
-    authorId: string,
+    authorUsername: string,
     screenshotBuffer: Buffer
   ): Promise<void> {
     try {
-      const message = arweaveService.generateUploadMessage(arweaveId, tweetId, authorId);
+      const message = arweaveService.generateUploadMessage(arweaveId, tweetId, authorUsername);
       
       // Save screenshot to temp file for Twitter upload
       const tempFilename = `tweet-${tweetId}-${Date.now()}.jpg`;
