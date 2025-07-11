@@ -223,7 +223,8 @@ class ArweaveService {
   generateUploadMessage(
     arweaveId: string,
     tweetId: string,
-    authorUsername: string
+    authorUsername: string,
+    requester: string
   ): string {
     const arweaveUrl = this.generateArweaveUrl(arweaveId);
 
@@ -241,13 +242,12 @@ class ArweaveService {
 
     // Dynamic outros
     const outros = [
-      `Stay frosty @${authorUsername}. #ArkiveNow #Arweave`,
-      `Another memory from @${authorUsername}, perfectly preserved. #ArkiveNow`,
-      `Cool moves @${authorUsername}. Your tweet is now immortal. #ArkiveNow`,
-      `The penguin never forgets @${authorUsername}. #ArkiveNow`,
-      `Glide on @${authorUsername}, your tweet is safe. #ArkiveNow`,
-      `Keep it cool @${authorUsername}. #ArkiveNow`,
-      `Preserved with penguin precision for @${authorUsername}. #ArkiveNow`,
+      `Stay frosty @${requester}. #ArkiveNow #Arweave`,
+      `Cool moves @${requester}. This tweet is now immortal. #ArkiveNow`,
+      `The penguin never forgets @${requester}. #ArkiveNow`,
+      `Glide on @${requester}, this tweet is safe. #ArkiveNow`,
+      `Keep it cool @${requester}. #ArkiveNow`,
+      `Preserved with penguin precision for @${requester}. #ArkiveNow`,
     ];
 
     // Pick random intro and outro

@@ -168,7 +168,8 @@ class BotService {
       });
       // Step 10: Reply with success message
       const authorUsername = tweet.author?.username || tweet.author_id;
-      await this.handleSuccess(mention, uploadResult.id, tweet.id, authorUsername, screenshotResult.buffer);
+      const requester = mention.author?.username || mention.author_id;
+      await this.handleSuccess(mention, uploadResult.id, tweet.id, authorUsername, requester, screenshotResult.buffer);
       logger.info('Successfully processed mention', {
         mentionId: mention.id,
         tweetId: tweet.id,
@@ -192,10 +193,11 @@ class BotService {
     arweaveId: string,
     tweetId: string,
     authorUsername: string,
+    requester: string,
     screenshotBuffer: Buffer
   ): Promise<void> {
     try {
-      const message = arweaveService.generateUploadMessage(arweaveId, tweetId, authorUsername);
+      const message = arweaveService.generateUploadMessage(arweaveId, tweetId, authorUsername, requester);
       
       // Save screenshot to temp file for Twitter upload
       const tempFilename = `tweet-${tweetId}-${Date.now()}.jpg`;

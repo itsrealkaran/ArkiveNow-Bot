@@ -132,7 +132,8 @@ async function testBotFlow() {
     const successMessage = arweaveService.generateUploadMessage(
       uploadResult.id,
       sampleTweet.id,
-      sampleAuthor.username
+      sampleAuthor.username,
+      sampleRequester.username
     );
 
     const errorMessage = arweaveService.generateErrorMessage(
