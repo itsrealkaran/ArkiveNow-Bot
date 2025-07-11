@@ -233,7 +233,7 @@ class BotService {
       // Log quota exceeded event
       await quotaService.logQuotaExceeded(authorId, mention.id, quotaCheck.reason || 'Quota exceeded');
 
-      const message = `❌ Sorry, you've reached your limit for today.
+      const message = `Sorry${mention.author?.username && ` @${mention.author?.username}`}, you've reached your limit for today.
 
 Daily remaining: ${quotaCheck.daily_remaining}
 Monthly remaining: ${quotaCheck.monthly_remaining}
