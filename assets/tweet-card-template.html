@@ -582,6 +582,7 @@
     function formatContent(content) {
         if (!content) return '';
         return content
+            .replace(/\n/g, '<br>') // Convert newlines to HTML line breaks
             .replace(/#(\w+)/g, '<span class="hashtag">#$1</span>')
             .replace(/@(\w+)/g, '<span class="mention">@$1</span>')
             .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" class="tweet-link" target="_blank">$1</a>');
