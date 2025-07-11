@@ -648,7 +648,7 @@
     }
 
     function getMediaUrl(media) {
-        return media.url || media.preview_url || 'https://dummyimage.com/500x300/cccccc/000000&text=+';
+        return media.url || media.preview_image_url || 'https://dummyimage.com/500x300/cccccc/000000&text=+';
     }
     
     function getMediaType(media) {
@@ -673,7 +673,7 @@
         switch (mediaType) {
             case 'video':
                 // Use preview_url for video thumbnail with play button overlay
-                const previewUrl = media.preview_url || media.url;
+                const previewUrl = media.preview_image_url || media.url;
                 mediaContent = `
                     <div class="video-player">
                         <img src="${previewUrl}" alt="${alt}" class="video-preview" crossorigin="anonymous">
@@ -692,7 +692,7 @@
                 indicators = '<div class="gif-indicator">GIF</div>';
                 break;
                 
-            case 'image':
+            case 'photo':
             default:
                 mediaContent = `<img src="${mediaUrl}" alt="${alt}" class="tweet-image" crossorigin="anonymous">`;
                 break;
