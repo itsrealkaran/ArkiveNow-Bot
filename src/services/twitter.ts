@@ -128,7 +128,7 @@ class TwitterService {
       const params: any = {
         max_results: 100,
         'tweet.fields': ['created_at', 'author_id', 'in_reply_to_user_id', 'referenced_tweets', 'public_metrics'],
-        'user.fields': ['username', 'name', 'profile_image_url', 'verified'],
+        'user.fields': ['username', 'name', 'profile_image_url', 'verified', 'verified_type', 'connection_status'],
         expansions: ['author_id', 'referenced_tweets.id', 'referenced_tweets.id.author_id'],
       };
 
@@ -550,8 +550,8 @@ class TwitterService {
     return this.makeRateLimitedRequest(async () => {
       try {
         const response = await this.client.v2.tweets(tweetIds, {
-          'tweet.fields': ['created_at', 'author_id', 'public_metrics', 'referenced_tweets', 'attachments'],
-          'user.fields': ['username', 'name', 'profile_image_url', 'verified'],
+          'tweet.fields': ['created_at', 'author_id', 'public_metrics', 'entities', 'referenced_tweets', 'attachments'],
+          'user.fields': ['username', 'name', 'profile_image_url', 'verified', 'verified_type'],
           'media.fields': ['url', 'preview_image_url', 'type', 'width', 'height', 'alt_text'],
           expansions: ['author_id', 'attachments.media_keys', 'referenced_tweets.id'],
         });

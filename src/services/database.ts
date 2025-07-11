@@ -88,7 +88,7 @@ class DatabaseService {
           includes_data JSONB,
           screenshot_arweave_id VARCHAR(255),
           screenshot_created_at TIMESTAMP WITH TIME ZONE,
-          processing_status VARCHAR(50) DEFAULT 'pending' CHECK (processing_status IN ('pending', 'processing', 'completed', 'failed')),
+          processing_status VARCHAR(50) DEFAULT 'pending' CHECK (processing_status IN ('pending', 'processing', 'completed', 'failed', 'upload_failed', 'fetch_failed', 'other_failed')),
           error_message TEXT,
           created_at_db TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -387,7 +387,7 @@ class DatabaseService {
 
   async updateTweetProcessingStatus(
     tweetId: string, 
-    status: 'pending' | 'processing' | 'completed' | 'failed',
+    status: 'pending' | 'processing' | 'completed' | 'failed' | 'upload_failed' | 'fetch_failed' | 'other_failed',
     arweaveId?: string,
     errorMessage?: string
   ): Promise<void> {
@@ -404,7 +404,7 @@ class DatabaseService {
         updateData.screenshot_created_at = new Date();
       }
 
-      if (status === 'failed' && errorMessage) {
+      if ((status === 'failed' || status === 'upload_failed' || status === 'fetch_failed' || status === 'other_failed') && errorMessage) {
         updateData.error_message = errorMessage;
       }
 
@@ -427,7 +427,49 @@ class DatabaseService {
     }
   }
 
-  async getTweetsByStatus(status: 'pending' | 'processing' | 'completed' | 'failed', limit = 100): Promise<any[]> {
+  /**
+   * Get tweets that need retry based on their failure type
+   */
+  async getTweetsForRetry(): Promise<{
+    uploadRetry: any[];
+    fetchRetry: any[];
+    otherRetry: any[];
+  }> {
+    const client = await this.pool.connect();
+    
+    try {
+      // Get tweets that failed upload (screenshot exists, upload failed)
+      const uploadRetryResult = await client.query(`
+        SELECT * FROM tweets 
+        WHERE processing_status = 'upload_failed' 
+        ORDER BY updated_at ASC
+      `);
+
+      // Get tweets that failed fetch (no screenshot, fetch failed)
+      const fetchRetryResult = await client.query(`
+        SELECT * FROM tweets 
+        WHERE processing_status = 'fetch_failed' 
+        ORDER BY updated_at ASC
+      `);
+
+      // Get tweets that failed other operations (need full reprocessing)
+      const otherRetryResult = await client.query(`
+        SELECT * FROM tweets 
+        WHERE processing_status = 'other_failed' 
+        ORDER BY updated_at ASC
+      `);
+
+      return {
+        uploadRetry: uploadRetryResult.rows,
+        fetchRetry: fetchRetryResult.rows,
+        otherRetry: otherRetryResult.rows
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async getTweetsByStatus(status: 'pending' | 'processing' | 'completed' | 'failed' | 'upload_failed' | 'fetch_failed' | 'other_failed', limit = 100): Promise<any[]> {
     const client = await this.pool.connect();
     
     try {
@@ -463,6 +505,9 @@ class DatabaseService {
     failed_tweets: number;
     pending_tweets: number;
     processing_tweets: number;
+    upload_failed_tweets: number;
+    fetch_failed_tweets: number;
+    other_failed_tweets: number;
   }> {
     const client = await this.pool.connect();
     
@@ -473,7 +518,10 @@ class DatabaseService {
           COUNT(CASE WHEN processing_status = 'completed' THEN 1 END) as completed_tweets,
           COUNT(CASE WHEN processing_status = 'failed' THEN 1 END) as failed_tweets,
           COUNT(CASE WHEN processing_status = 'pending' THEN 1 END) as pending_tweets,
-          COUNT(CASE WHEN processing_status = 'processing' THEN 1 END) as processing_tweets
+          COUNT(CASE WHEN processing_status = 'processing' THEN 1 END) as processing_tweets,
+          COUNT(CASE WHEN processing_status = 'upload_failed' THEN 1 END) as upload_failed_tweets,
+          COUNT(CASE WHEN processing_status = 'fetch_failed' THEN 1 END) as fetch_failed_tweets,
+          COUNT(CASE WHEN processing_status = 'other_failed' THEN 1 END) as other_failed_tweets
         FROM tweets
       `);
       

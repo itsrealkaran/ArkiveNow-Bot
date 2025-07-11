@@ -628,7 +628,7 @@
         // Handle multiple media formats
         if (Array.isArray(tweet.media) && tweet.media.length > 0) {
             return tweet.media;
-        } else if (tweet.media && (tweet.media.url || tweet.media.preview_url)) {
+        } else if (tweet.media && (tweet.media.url || tweet.media.preview_image_url)) {
             return [tweet.media];
         } else if (tweet.attachments && tweet.attachments.media_keys) {
             // Twitter API v2 format
@@ -673,7 +673,7 @@
         
         switch (mediaType) {
             case 'video':
-                // Use preview_url for video thumbnail with play button overlay
+                // Use preview_image_url for video thumbnail with play button overlay
                 const previewUrl = media.preview_image_url || media.url;
                 mediaContent = `
                     <div class="video-player">
@@ -721,7 +721,7 @@
         
         switch (mediaType) {
             case 'video':
-                const previewUrl = media.preview_url || media.url;
+                const previewUrl = media.preview_image_url || media.url;
                 mediaContent = `
                     <div class="quoted-video-player">
                         <img src="${previewUrl}" alt="${alt}" class="quoted-video-preview" crossorigin="anonymous">

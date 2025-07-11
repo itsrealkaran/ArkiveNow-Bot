@@ -32,6 +32,10 @@ class BotService {
    * Process a batch of mentions
    */
   async processMentionsBatch(mentions: TwitterMention[]): Promise<void> {
+    // First, process any retries from previous cycles
+    await this.processRetries();
+    
+    // Then process new mentions
     // Step 1: Collect all relevant tweet IDs
     const mentionToTweetId: { [mentionId: string]: string } = {};
     for (const mention of mentions) {
@@ -71,13 +75,13 @@ class BotService {
       const tweetId = mentionToTweetId[mention.id];
       if (!tweetId || tweetId === '') {
         logger.warn('No tweetId found for mention', { mentionId: mention.id });
-        await this.handleInvalidRequest(mention, { tweetId: null, type: 'invalid', originalText: mention.text });
+        // Don't reply immediately, will retry in next cycle
         continue;
       }
       const tweet = tweetMap.get(tweetId);
       if (!tweet) {
         logger.warn('Tweet not found for mention', { mentionId: mention.id, tweetId });
-        await this.handleInvalidRequest(mention, { tweetId: null, type: 'invalid', originalText: mention.text });
+        // Don't reply immediately, will retry in next cycle
         continue;
       }
       
@@ -107,6 +111,179 @@ class BotService {
   }
 
   /**
+   * Process retries from previous cycles
+   */
+  async processRetries(): Promise<void> {
+    try {
+      const retryTweets = await databaseService.getTweetsForRetry();
+      
+      // Process upload retries (screenshot exists, just retry upload)
+      for (const tweetData of retryTweets.uploadRetry) {
+        logger.info('Processing upload retry', { tweetId: tweetData.tweet_id });
+        
+        try {
+          // Reconstruct tweet object from stored data
+          const tweet: TwitterTweet = {
+            id: tweetData.tweet_id,
+            author_id: tweetData.author_id,
+            text: tweetData.text,
+            created_at: tweetData.created_at,
+            public_metrics: tweetData.public_metrics,
+            author: tweetData.author_data,
+            media: tweetData.media_data,
+            referenced_tweets: tweetData.referenced_tweets,
+            includes: tweetData.includes_data
+          };
+
+          // Take screenshot again (since we don't store screenshots)
+          const screenshotResult = await screenshotService.takeScreenshot(tweet, {});
+          if (!screenshotResult.success || !screenshotResult.buffer) {
+            await databaseService.updateTweetProcessingStatus(tweet.id, 'upload_failed', undefined, `Screenshot retry failed: ${screenshotResult.error}`);
+            continue;
+          }
+
+          // Retry upload
+          const uploadResult = await arweaveService.uploadScreenshot(
+            screenshotResult,
+            tweet.id,
+            tweet.author_id,
+            tweet.text
+          );
+
+          if (uploadResult.success && uploadResult.id) {
+            await databaseService.updateTweetProcessingStatus(tweet.id, 'completed', uploadResult.id);
+            logger.info('Upload retry successful', { tweetId: tweet.id, arweaveId: uploadResult.id });
+          } else {
+            await databaseService.updateTweetProcessingStatus(tweet.id, 'upload_failed', undefined, `Upload retry failed: ${uploadResult.error}`);
+            logger.warn('Upload retry failed, will retry again', { tweetId: tweet.id, error: uploadResult.error });
+          }
+        } catch (error) {
+          logger.error('Error processing upload retry', { tweetId: tweetData.tweet_id, error });
+          await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'upload_failed', undefined, `Upload retry error: ${error}`);
+        }
+      }
+
+      // Process fetch retries (need to refetch tweet data)
+      for (const tweetData of retryTweets.fetchRetry) {
+        logger.info('Processing fetch retry', { tweetId: tweetData.tweet_id });
+        
+        try {
+          // Refetch tweet data from Twitter
+          const tweets = await twitterService.getTweetsByIds([tweetData.tweet_id]);
+          if (tweets.length === 0) {
+            await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'fetch_failed', undefined, 'Tweet not found on retry');
+            continue;
+          }
+
+          const tweet = tweets[0];
+          if (!tweet) {
+            await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'fetch_failed', undefined, 'Tweet not found on retry');
+            continue;
+          }
+          // Update stored tweet data
+          await databaseService.storeTweet({
+            tweet_id: tweet.id,
+            author_id: tweet.author_id,
+            text: tweet.text,
+            created_at: tweet.created_at,
+            public_metrics: tweet.public_metrics,
+            author_data: tweet.author,
+            media_data: tweet.media,
+            referenced_tweets: tweet.referenced_tweets,
+            includes_data: tweet.includes
+          });
+
+          // Process the tweet normally
+          await this.processTweetForRetry(tweet);
+        } catch (error) {
+          logger.error('Error processing fetch retry', { tweetId: tweetData.tweet_id, error });
+          await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'fetch_failed', undefined, `Fetch retry error: ${error}`);
+        }
+      }
+
+      // Process other retries (full reprocessing)
+      for (const tweetData of retryTweets.otherRetry) {
+        logger.info('Processing other retry', { tweetId: tweetData.tweet_id });
+        
+        try {
+          // Refetch tweet data from Twitter
+          const tweets = await twitterService.getTweetsByIds([tweetData.tweet_id]);
+          if (tweets.length === 0) {
+            await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'other_failed', undefined, 'Tweet not found on retry');
+            continue;
+          }
+
+          const tweet = tweets[0];
+          if (!tweet) {
+            await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'other_failed', undefined, 'Tweet not found on retry');
+            continue;
+          }
+          // Update stored tweet data
+          await databaseService.storeTweet({
+            tweet_id: tweet.id,
+            author_id: tweet.author_id,
+            text: tweet.text,
+            created_at: tweet.created_at,
+            public_metrics: tweet.public_metrics,
+            author_data: tweet.author,
+            media_data: tweet.media,
+            referenced_tweets: tweet.referenced_tweets,
+            includes_data: tweet.includes
+          });
+
+          // Process the tweet normally
+          await this.processTweetForRetry(tweet);
+        } catch (error) {
+          logger.error('Error processing other retry', { tweetId: tweetData.tweet_id, error });
+          await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'other_failed', undefined, `Other retry error: ${error}`);
+        }
+      }
+    } catch (error) {
+      logger.error('Error processing retries', { error });
+    }
+  }
+
+  /**
+   * Process a tweet for retry (without mention context)
+   */
+  async processTweetForRetry(tweet: TwitterTweet): Promise<void> {
+    try {
+      // Check if tweet is public
+      const isPublic = await twitterService.isPublicTweet(tweet);
+      if (!isPublic) {
+        await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, 'Cannot screenshot private tweets');
+        return;
+      }
+
+      // Take screenshot
+      const screenshotResult = await screenshotService.takeScreenshot(tweet, {});
+      if (!screenshotResult.success || !screenshotResult.buffer) {
+        await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, `Screenshot failed: ${screenshotResult.error}`);
+        return;
+      }
+
+      // Upload to Arweave
+      const uploadResult = await arweaveService.uploadScreenshot(
+        screenshotResult,
+        tweet.id,
+        tweet.author_id,
+        tweet.text
+      );
+
+      if (uploadResult.success && uploadResult.id) {
+        await databaseService.updateTweetProcessingStatus(tweet.id, 'completed', uploadResult.id);
+        logger.info('Retry processing successful', { tweetId: tweet.id, arweaveId: uploadResult.id });
+      } else {
+        await databaseService.updateTweetProcessingStatus(tweet.id, 'upload_failed', undefined, `Upload failed: ${uploadResult.error}`);
+        logger.warn('Retry upload failed, will retry again', { tweetId: tweet.id, error: uploadResult.error });
+      }
+    } catch (error) {
+      logger.error('Error processing tweet for retry', { tweetId: tweet.id, error });
+      await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, `Retry processing error: ${error}`);
+    }
+  }
+
+  /**
    * Process a single mention with its tweet (refactored from processMention)
    */
   async processMentionWithTweet(mention: TwitterMention, tweet: TwitterTweet): Promise<void> {
@@ -131,15 +308,17 @@ class BotService {
       // Step 4: Check if tweet is public
       const isPublic = await twitterService.isPublicTweet(tweet);
       if (!isPublic) {
-        await databaseService.updateTweetProcessingStatus(tweet.id, 'failed', undefined, 'Cannot screenshot private tweets');
-        await this.handleError(mention, 'Cannot screenshot private tweets');
+        await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, 'Cannot screenshot private tweets');
+        // Don't reply immediately, will retry in next cycle
+        logger.warn('Private tweet, will retry in next cycle', { tweetId: tweet.id });
         return;
       }
       // Step 5: Take screenshot (no author lookup)
       const screenshotResult = await screenshotService.takeScreenshot(tweet, {});
       if (!screenshotResult.success || !screenshotResult.buffer) {
-        await databaseService.updateTweetProcessingStatus(tweet.id, 'failed', undefined, `Screenshot failed: ${screenshotResult.error}`);
-        await this.handleError(mention, `Screenshot failed: ${screenshotResult.error}`);
+        await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, `Screenshot failed: ${screenshotResult.error}`);
+        // Don't reply immediately, will retry in next cycle
+        logger.warn('Screenshot failed, will retry in next cycle', { tweetId: tweet.id, error: screenshotResult.error });
         return;
       }
       // Step 6: Upload to Arweave
@@ -150,8 +329,9 @@ class BotService {
         tweet.text
       );
       if (!uploadResult.success || !uploadResult.id) {
-        await databaseService.updateTweetProcessingStatus(tweet.id, 'failed', undefined, `Upload failed: ${uploadResult.error}`);
-        await this.handleError(mention, `Upload failed: ${uploadResult.error}`);
+        await databaseService.updateTweetProcessingStatus(tweet.id, 'upload_failed', undefined, `Upload failed: ${uploadResult.error}`);
+        // Don't reply immediately, will retry upload in next cycle
+        logger.warn('Upload failed, will retry upload in next cycle', { tweetId: tweet.id, error: uploadResult.error });
         return;
       }
       // Step 7: Increment user quota using author_id
@@ -178,8 +358,9 @@ class BotService {
       });
     } catch (error) {
       logger.error('Error processing mention', { mentionId: mention.id, error });
-      await databaseService.updateTweetProcessingStatus(tweet.id, 'failed', undefined, 'An unexpected error occurred while processing your request');
-      await this.handleError(mention, 'An unexpected error occurred while processing your request');
+      await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, 'An unexpected error occurred while processing your request');
+      // Don't reply immediately, will retry in next cycle
+      logger.warn('Unexpected error, will retry in next cycle', { tweetId: tweet.id, error });
     } finally {
       this.isProcessing = false;
     }
