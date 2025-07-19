@@ -18,6 +18,7 @@ export interface TwitterUser {
   name: string;
   profile_image_url?: string;
   verified?: boolean;
+  verified_type?: 'blue' | 'blue_verified' | 'business' | 'government' | 'none';
 }
 
 export interface TwitterMedia {

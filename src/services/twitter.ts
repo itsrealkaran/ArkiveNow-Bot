@@ -575,6 +575,7 @@ class TwitterService {
             name: user.name,
             profile_image_url: user.profile_image_url,
             verified: user.verified,
+            verified_type: user.verified_type,
           });
         });
         

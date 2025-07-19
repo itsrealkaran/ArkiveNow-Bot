@@ -17,6 +17,8 @@
     "test-bot": "ts-node src/scripts/test-bot.ts",
     "test-rate-limit": "ts-node src/scripts/test-rate-limit.ts",
     "health-check": "ts-node src/scripts/health-check.ts",
+    "update-authorid": "ts-node src/scripts/update-author-id.ts",
+    "update-authorid-dryrun": "ts-node src/scripts/update-author-id-dry-run.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
