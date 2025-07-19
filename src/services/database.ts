@@ -73,6 +73,20 @@ class DatabaseService {
         )
       `);
 
+      // Create apis table to store multiple API configurations
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS apis (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(255) NOT NULL,
+          api_tokens JSONB NOT NULL,
+          requests INTEGER DEFAULT 0,
+          renew_date DATE NOT NULL,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+      `);
+
       // Create tweets table to store all tweet data
       await client.query(`
         CREATE TABLE IF NOT EXISTS tweets (
@@ -105,6 +119,9 @@ class DatabaseService {
         CREATE INDEX IF NOT EXISTS idx_tweets_processing_status ON tweets(processing_status);
         CREATE INDEX IF NOT EXISTS idx_tweets_created_at ON tweets(created_at);
         CREATE INDEX IF NOT EXISTS idx_tweets_screenshot_created_at ON tweets(screenshot_created_at);
+        CREATE INDEX IF NOT EXISTS idx_apis_is_active ON apis(is_active);
+        CREATE INDEX IF NOT EXISTS idx_apis_renew_date ON apis(renew_date);
+        CREATE INDEX IF NOT EXISTS idx_apis_requests ON apis(requests);
       `);
 
       await client.query('COMMIT');
@@ -559,6 +576,132 @@ class DatabaseService {
       `);
       
       return result.rows[0]?.latest_mention_time || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  // API Management Methods
+  async getAvailableApi(): Promise<any | null> {
+    const client = await this.pool.connect();
+    
+    try {
+      // Get the API with the least requests that is active and not expired
+      const result = await client.query(`
+        SELECT * FROM apis 
+        WHERE is_active = true 
+        AND renew_date >= CURRENT_DATE
+        ORDER BY requests ASC, renew_date ASC
+        LIMIT 1
+      `);
+      
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async incrementApiRequests(apiId: string): Promise<void> {
+    const client = await this.pool.connect();
+    
+    try {
+      await client.query(
+        'UPDATE apis SET requests = requests + 1, updated_at = NOW() WHERE id = $1',
+        [apiId]
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  async resetApiRequests(): Promise<void> {
+    const client = await this.pool.connect();
+    
+    try {
+      // Reset requests for APIs where renew_date has passed
+      await client.query(`
+        UPDATE apis 
+        SET requests = 0, updated_at = NOW() 
+        WHERE renew_date < CURRENT_DATE
+      `);
+      
+      logger.info('Reset API requests for expired renew dates');
+    } finally {
+      client.release();
+    }
+  }
+
+  async addApi(apiData: {
+    name: string;
+    apiTokens: any;
+    renewDate: string;
+  }): Promise<any> {
+    const client = await this.pool.connect();
+    
+    try {
+      const result = await client.query(
+        `INSERT INTO apis (name, api_tokens, renew_date) 
+         VALUES ($1, $2, $3) RETURNING *`,
+        [apiData.name, JSON.stringify(apiData.apiTokens), apiData.renewDate]
+      );
+      
+      logger.info('Added new API configuration', { name: apiData.name });
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateApi(apiId: string, updates: {
+    name?: string;
+    apiTokens?: any;
+    renewDate?: string;
+    isActive?: boolean;
+  }): Promise<void> {
+    const client = await this.pool.connect();
+    
+    try {
+      const setClause = Object.keys(updates)
+        .map((key, index) => {
+          if (key === 'apiTokens') return `api_tokens = $${index + 2}`;
+          if (key === 'renewDate') return `renew_date = $${index + 2}`;
+          if (key === 'isActive') return `is_active = $${index + 2}`;
+          return `${key} = $${index + 2}`;
+        })
+        .join(', ');
+
+      const values = Object.values(updates).map(value => 
+        typeof value === 'object' ? JSON.stringify(value) : value
+      );
+
+      await client.query(
+        `UPDATE apis SET ${setClause}, updated_at = NOW() WHERE id = $1`,
+        [apiId, ...values]
+      );
+      
+      logger.info('Updated API configuration', { apiId });
+    } finally {
+      client.release();
+    }
+  }
+
+  async getAllApis(): Promise<any[]> {
+    const client = await this.pool.connect();
+    
+    try {
+      const result = await client.query('SELECT * FROM apis ORDER BY name');
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteApi(apiId: string): Promise<void> {
+    const client = await this.pool.connect();
+    
+    try {
+      await client.query('DELETE FROM apis WHERE id = $1', [apiId]);
+      logger.info('Deleted API configuration', { apiId });
     } finally {
       client.release();
     }

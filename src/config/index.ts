@@ -12,6 +12,8 @@ const envSchema = z.object({
   TWITTER_ACCESS_TOKEN: z.string().min(1),
   TWITTER_ACCESS_SECRET: z.string().min(1),
   TWITTER_BEARER_TOKEN: z.string().min(1),
+  TWITTER_CLIENT_ID: z.string().min(1),
+  TWITTER_CLIENT_SECRET: z.string().min(1),
   
   // Database
   DATABASE_URL: z.string().url(),
@@ -55,6 +57,8 @@ export const twitterConfig = {
   accessToken: config.TWITTER_ACCESS_TOKEN,
   accessSecret: config.TWITTER_ACCESS_SECRET,
   bearerToken: config.TWITTER_BEARER_TOKEN,
+  clientId: config.TWITTER_CLIENT_ID,
+  clientSecret: config.TWITTER_CLIENT_SECRET,
 };
 
 export const databaseConfig = {
