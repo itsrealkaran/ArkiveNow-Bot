@@ -7,15 +7,15 @@ async function main() {
 
     // Example: Add a new API configuration
     const newApi = {
-      name: 'Twitter API Account 1',
+      name: 'Apectory',
       apiTokens: {
-        TWITTER_API_KEY: process.env.TWITTER_API_KEY || '',
-        TWITTER_API_SECRET: process.env.TWITTER_API_SECRET || '',
-        TWITTER_ACCESS_TOKEN: process.env.TWITTER_ACCESS_TOKEN || '',
-        TWITTER_ACCESS_SECRET: process.env.TWITTER_ACCESS_SECRET || '',
-        TWITTER_BEARER_TOKEN: process.env.TWITTER_BEARER_TOKEN || '',
-        TWITTER_CLIENT_ID: process.env.TWITTER_CLIENT_ID || '',
-        TWITTER_CLIENT_SECRET: process.env.TWITTER_CLIENT_SECRET || '',
+        TWITTER_API_KEY: 'fch1jvD74dqwCCUcHd8Hywman',
+        TWITTER_API_SECRET: 'hCPROxXeRzLUSdRkBZN3eWICFQ1xz1Hn99TjP5d9GhY4Oa2Il7',
+        TWITTER_ACCESS_TOKEN: '1369963168022237186-kpDKq7B3QPGTACKtgcR1GDVWDj2xR6',
+        TWITTER_ACCESS_SECRET: 'hp4H3jSUD0FtK27uWBFN9HAlUe47rf9ivbnkJ4biviDy7',
+        TWITTER_BEARER_TOKEN: 'AAAAAAAAAAAAAAAAAAAAAL1ANgEAAAAArVMeGx4ZDWEzkNA%2B2AwfcehvAEo%3DE6cJ8T4cczozeQsvAnVFwHyUkJwhgj87tqwqehCGQIAVPXyrtX',
+        TWITTER_CLIENT_ID: '',
+        TWITTER_CLIENT_SECRET: '',
       },
       renewDate: '2024-12-31' // Set to your API renewal date
     };

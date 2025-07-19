@@ -332,8 +332,9 @@ class TwitterService {
       try {
         const params = new URLSearchParams({
           'tweet.fields': 'created_at,author_id,public_metrics,referenced_tweets,attachments',
-          'user.fields': 'username,name,profile_image_url,verified',
+          'user.fields': 'username,name,profile_image_url,verified,verified_type,affiliation,entities',
           'media.fields': 'url,preview_image_url,type,width,height,alt_text',
+          'poll.fields': 'duration_minutes,end_datetime,options,voting_status',
           'expansions': 'author_id,attachments.media_keys,referenced_tweets.id,referenced_tweets.id.author_id,referenced_tweets.id.attachments.media_keys',
         });
 
@@ -675,10 +676,11 @@ class TwitterService {
       
       try {
         const params = new URLSearchParams({
-          'tweet.fields': 'created_at,author_id,public_metrics,entities,referenced_tweets,attachments',
-          'user.fields': 'username,name,profile_image_url,verified,verified_type',
+          'user.fields': 'username,name,profile_image_url,verified,verified_type,affiliation,entities',
           'media.fields': 'url,preview_image_url,type,width,height,alt_text',
-          'expansions': 'author_id,attachments.media_keys,referenced_tweets.id',
+          'poll.fields': 'id,duration_minutes,end_datetime,options,voting_status',
+          'expansions': 'author_id,attachments.media_keys,referenced_tweets.id,referenced_tweets.id.author_id,referenced_tweets.id.attachments.media_keys',
+          'tweet.fields': 'created_at,author_id,public_metrics,entities,referenced_tweets,attachments',
           'ids': tweetIds.join(',')
         });
 
@@ -692,7 +694,7 @@ class TwitterService {
         
         logger.info('Batch tweet fetch response', { 
           tweetIds, 
-          response: response.data,
+          response: response,
           requestsNeeded,
           tweetCount: tweetIds.length
         });
