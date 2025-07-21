@@ -93,6 +93,7 @@ class DatabaseService {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           tweet_id VARCHAR(255) UNIQUE NOT NULL,
           author_id VARCHAR(255) NOT NULL,
+          username VARCHAR,
           text TEXT NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE NOT NULL,
           public_metrics JSONB,
@@ -107,6 +108,16 @@ class DatabaseService {
           created_at_db TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
+      `);
+
+      // Add username column if it doesn't exist
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tweets' AND column_name='username') THEN
+            ALTER TABLE tweets ADD COLUMN username VARCHAR;
+          END IF;
+        END$$;
       `);
 
       // Create indexes for better performance
@@ -344,6 +355,7 @@ class DatabaseService {
   async storeTweet(tweetData: {
     tweet_id: string;
     author_id: string;
+    username?: string;
     text: string;
     created_at: string;
     public_metrics?: any;
@@ -353,14 +365,15 @@ class DatabaseService {
     includes_data?: any;
   }): Promise<void> {
     const client = await this.pool.connect();
-    
     try {
       await client.query(
         `INSERT INTO tweets (
-          tweet_id, author_id, text, created_at, public_metrics, 
+          tweet_id, author_id, username, text, created_at, public_metrics, 
           author_data, media_data, referenced_tweets, includes_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (tweet_id) DO UPDATE SET
+          author_id = EXCLUDED.author_id,
+          username = EXCLUDED.username,
           text = EXCLUDED.text,
           public_metrics = EXCLUDED.public_metrics,
           author_data = EXCLUDED.author_data,
@@ -371,6 +384,7 @@ class DatabaseService {
         [
           tweetData.tweet_id,
           tweetData.author_id,
+          tweetData.username || (tweetData.author_data?.username ?? null),
           tweetData.text,
           tweetData.created_at,
           JSON.stringify(tweetData.public_metrics),
@@ -380,7 +394,6 @@ class DatabaseService {
           JSON.stringify(tweetData.includes_data)
         ]
       );
-      
       logger.info('Stored tweet data', { tweetId: tweetData.tweet_id });
     } finally {
       client.release();

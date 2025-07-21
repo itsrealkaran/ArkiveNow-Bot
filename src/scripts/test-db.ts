@@ -9,6 +9,7 @@ async function testDatabase() {
     const testTweet = {
       tweet_id: '1234567890123456789',
       author_id: '9876543210987654321',
+      username: 'testuser',
       text: 'This is a test tweet with quoted content!',
       created_at: new Date().toISOString(),
       public_metrics: {
@@ -74,7 +75,8 @@ async function testDatabase() {
       tweetId: retrievedTweet.tweet_id,
       status: retrievedTweet.processing_status,
       hasAuthorData: !!retrievedTweet.author_data,
-      hasMediaData: !!retrievedTweet.media_data
+      hasMediaData: !!retrievedTweet.media_data,
+      username: retrievedTweet.username
     });
 
     // Update to completed

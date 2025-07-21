@@ -65,6 +65,7 @@ async function testBotFlow() {
     await databaseService.storeTweet({
       tweet_id: sampleTweet.id,
       author_id: sampleTweet.author_id,
+      username: sampleAuthor.username,
       text: sampleTweet.text,
       created_at: sampleTweet.created_at,
       public_metrics: sampleTweet.public_metrics,

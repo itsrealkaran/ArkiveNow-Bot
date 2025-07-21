@@ -113,6 +113,7 @@ async function testQuotedTweets() {
     await databaseService.storeTweet({
       tweet_id: mainTweet.id,
       author_id: mainTweet.author_id,
+      username: mainTweet.author?.username || '',
       text: mainTweet.text,
       created_at: mainTweet.created_at,
       public_metrics: mainTweet.public_metrics,

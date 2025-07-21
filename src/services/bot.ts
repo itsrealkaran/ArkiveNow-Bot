@@ -90,6 +90,7 @@ class BotService {
         await databaseService.storeTweet({
           tweet_id: tweet.id,
           author_id: mention.author_id,
+          username: mention.author?.username || '',
           text: tweet.text,
           created_at: tweet.created_at,
           public_metrics: tweet.public_metrics,
@@ -184,6 +185,7 @@ class BotService {
           await databaseService.storeTweet({
             tweet_id: tweet.id,
             author_id: tweetData.author_id, // Keep the original requester's author_id from stored data
+            username: tweet.author?.username || '',
             text: tweet.text,
             created_at: tweet.created_at,
             public_metrics: tweet.public_metrics,
@@ -222,6 +224,7 @@ class BotService {
           await databaseService.storeTweet({
             tweet_id: tweet.id,
             author_id: tweetData.author_id, // Keep the original requester's author_id from stored data
+            username: tweet.author?.username || '',
             text: tweet.text,
             created_at: tweet.created_at,
             public_metrics: tweet.public_metrics,

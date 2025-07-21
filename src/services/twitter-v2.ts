@@ -1,6 +1,6 @@
 import { botConfig } from '../config';
 import logger from '../utils/logger';
-import { TwitterMention, TwitterTweet, TwitterUser, TwitterMedia } from '../types';
+import { TwitterMention, TwitterTweet, TwitterUser, TwitterMedia, OptimizedTweet, OptimizedTweetResponse, OptimizedAuthor, OptimizedMedia, OptimizedPoll, OptimizedMetrics, OptimizedQuotedTweet, OptimizedArticle } from '../types';
 import databaseService from './database';
 import apiManager from './api-manager';
 
@@ -217,7 +217,7 @@ class TwitterService {
       const params = new URLSearchParams({
         'max_results': '100',
         'tweet.fields': 'created_at,author_id,in_reply_to_user_id,referenced_tweets,public_metrics',
-        'user.fields': 'username,name,profile_image_url,verified,verified_type,connection_status',
+        'user.fields': 'username,name,profile_image_url,connection_status,verified,verified_type',
         'expansions': 'author_id,referenced_tweets.id,referenced_tweets.id.author_id',
       });
 
@@ -261,6 +261,7 @@ class TwitterService {
         const usersData: any[] = response.includes?.users || [];
 
         logger.info('Raw API response received:', {
+          response: response,
           hasData: mentionsData.length > 0,
           processedLength: mentionsData.length,
           usersCount: usersData.length,
@@ -766,6 +767,509 @@ class TwitterService {
       } catch (error) {
         logger.error('Failed to batch fetch tweets', { tweetIds, error });
         return [];
+      }
+    }, requestsNeeded);
+  }
+
+  /**
+   * Get a single tweet and return optimized structure
+   */
+  async getOptimizedTweet(tweetId: string): Promise<OptimizedTweet | null> {
+    return this.makeDefaultRequest(async () => {
+      try {
+        const params = new URLSearchParams({
+          'tweet.fields': 'created_at,author_id,public_metrics,referenced_tweets,attachments,entities,article',
+          'user.fields': 'username,name,profile_image_url,verified,verified_type,affiliation,entities',
+          'media.fields': 'url,preview_image_url,type,width,height,alt_text',
+          'poll.fields': 'duration_minutes,end_datetime,options,voting_status',
+          'expansions': 'author_id,attachments.media_keys,referenced_tweets.id,referenced_tweets.id.author_id,referenced_tweets.id.attachments.media_keys',
+        });
+
+        const response = await this.makeTwitterRequest(`/tweets/${tweetId}?${params.toString()}`);
+
+        if (!response.data) {
+          logger.warn('Tweet not found', { tweetId });
+          return null;
+        }
+
+        const tweet = response.data;
+        const author = response.includes?.users?.[0];
+        const metrics = tweet.public_metrics || {};
+        
+        // Build optimized author
+        const optimizedAuthor: OptimizedAuthor = {
+          id: author?.id || tweet.author_id,
+          username: author?.username || 'unknown',
+          name: author?.name || 'Unknown User',
+          profile_picture: author?.profile_image_url || '',
+          verified: author?.verified || false,
+          verification_type: author?.verified_type || 'none',
+          affiliation: author?.affiliation || null
+        };
+
+        // Build optimized metrics
+        const optimizedMetrics: OptimizedMetrics = {
+          replies: typeof metrics.reply_count === 'number' ? metrics.reply_count : 0,
+          retweets: typeof metrics.retweet_count === 'number' ? metrics.retweet_count : 0,
+          likes: typeof metrics.like_count === 'number' ? metrics.like_count : 0,
+          quotes: typeof metrics.quote_count === 'number' ? metrics.quote_count : 0,
+          bookmarks: typeof metrics.bookmark_count === 'number' ? metrics.bookmark_count : 0,
+          impressions: typeof metrics.impression_count === 'number' ? metrics.impression_count : 0
+        };
+
+        // Build optimized media array
+        const optimizedMedia: OptimizedMedia[] = [];
+
+        // Handle media attachments
+        if (tweet.attachments?.media_keys && response.includes?.media) {
+          const mediaData = response.includes.media;
+          const mediaMap = new Map<string, any>();
+          mediaData.forEach((media: any) => {
+            mediaMap.set(media.media_key, media);
+          });
+
+          tweet.attachments.media_keys.forEach((key: string) => {
+            const media = mediaMap.get(key);
+            if (media) {
+              optimizedMedia.push({
+                type: media.type === 'animated_gif' ? 'gif' : media.type,
+                url: media.url,
+                preview_image_url: media.preview_image_url,
+                width: media.width,
+                height: media.height,
+                alt_text: media.alt_text
+              });
+            }
+          });
+        }
+
+        // Handle link previews from entities
+        if (tweet.entities?.urls) {
+          tweet.entities.urls.forEach((url: any) => {
+            if (url.images && url.images.length > 0) {
+              optimizedMedia.push({
+                type: 'link_preview',
+                url: url.expanded_url,
+                title: url.title,
+                description: url.description,
+                preview_image_url: url.images[0]?.url,
+                domain: url.display_url?.split('/')[0] || ''
+              });
+            }
+          });
+        }
+
+        // Handle quoted tweet
+        let quotedTweetId: string | null = null;
+        let quotedTweet: OptimizedQuotedTweet | null = null;
+        if (tweet.referenced_tweets && tweet.referenced_tweets.length > 0) {
+          const quotedTweetRef = tweet.referenced_tweets.find((ref: any) => ref.type === 'quoted');
+          if (quotedTweetRef) {
+            quotedTweetId = quotedTweetRef.id;
+            
+            // Get quoted tweet details from includes
+            const quotedTweetData = response.includes?.tweets?.find((t: any) => t.id === quotedTweetRef.id);
+            if (quotedTweetData) {
+              const quotedAuthor = response.includes?.users?.find((u: any) => u.id === quotedTweetData.author_id);
+              
+              // Build quoted tweet author
+              const quotedOptimizedAuthor: OptimizedAuthor = {
+                id: quotedAuthor?.id || quotedTweetData.author_id,
+                username: quotedAuthor?.username || 'unknown',
+                name: quotedAuthor?.name || 'Unknown User',
+                profile_picture: quotedAuthor?.profile_image_url || '',
+                verified: quotedAuthor?.verified || false,
+                verification_type: quotedAuthor?.verified_type || 'none',
+                affiliation: quotedAuthor?.affiliation || null
+              };
+
+              // Build quoted tweet metrics
+              const quotedMetrics = quotedTweetData.public_metrics || {};
+              const quotedOptimizedMetrics: OptimizedMetrics = {
+                replies: typeof quotedMetrics.reply_count === 'number' ? quotedMetrics.reply_count : 0,
+                retweets: typeof quotedMetrics.retweet_count === 'number' ? quotedMetrics.retweet_count : 0,
+                likes: typeof quotedMetrics.like_count === 'number' ? quotedMetrics.like_count : 0,
+                quotes: typeof quotedMetrics.quote_count === 'number' ? quotedMetrics.quote_count : 0,
+                bookmarks: typeof quotedMetrics.bookmark_count === 'number' ? quotedMetrics.bookmark_count : 0,
+                impressions: typeof quotedMetrics.impression_count === 'number' ? quotedMetrics.impression_count : 0
+              };
+
+              // Build quoted tweet media
+              const quotedOptimizedMedia: OptimizedMedia[] = [];
+              
+              // Handle quoted tweet media (if any)
+              if (quotedTweetData.attachments?.media_keys && response.includes?.media) {
+                const mediaMap = new Map<string, any>();
+                response.includes.media.forEach((media: any) => {
+                  mediaMap.set(media.media_key, media);
+                });
+
+                quotedTweetData.attachments.media_keys.forEach((key: string) => {
+                  const media = mediaMap.get(key);
+                  if (media) {
+                    quotedOptimizedMedia.push({
+                      type: media.type === 'animated_gif' ? 'gif' : media.type,
+                      url: media.url,
+                      preview_image_url: media.preview_image_url,
+                      width: media.width,
+                      height: media.height,
+                      alt_text: media.alt_text
+                    });
+                  }
+                });
+              }
+
+              // Handle quoted tweet link previews
+              if (quotedTweetData.entities?.urls) {
+                quotedTweetData.entities.urls.forEach((url: any) => {
+                  if (url.images && url.images.length > 0) {
+                    quotedOptimizedMedia.push({
+                      type: 'link_preview',
+                      url: url.expanded_url,
+                      title: url.title,
+                      description: url.description,
+                      preview_image_url: url.images[0]?.url,
+                      domain: url.display_url?.split('/')[0] || ''
+                    });
+                  }
+                });
+              }
+
+              // Handle quoted tweet article
+              let quotedArticle: OptimizedArticle | null = null;
+              if (quotedTweetData.article) {
+                quotedArticle = {
+                  title: quotedTweetData.article.title
+                };
+              }
+
+              quotedTweet = {
+                id: quotedTweetData.id,
+                content: quotedTweetData.text,
+                created_at: quotedTweetData.created_at,
+                author: quotedOptimizedAuthor,
+                media: quotedOptimizedMedia,
+                article: quotedArticle,
+                metrics: quotedOptimizedMetrics
+              };
+            }
+          }
+        }
+
+        // Handle poll
+        let poll: OptimizedPoll | null = null;
+        if (tweet.attachments?.poll_ids && response.includes?.polls) {
+          const pollId = tweet.attachments.poll_ids[0];
+          const pollData = response.includes.polls.find((p: any) => p.id === pollId);
+          if (pollData) {
+            poll = {
+              id: pollData.id,
+              question: 'Poll Question', // Twitter API doesn't provide poll question in this endpoint
+              options: pollData.options?.map((option: any, index: number) => ({
+                position: index + 1,
+                label: option.label,
+                votes: option.votes || 0
+              })) || [],
+              end_datetime: pollData.end_datetime,
+              voting_status: pollData.voting_status
+            };
+          }
+        }
+
+        // Handle article
+        let article: OptimizedArticle | null = null;
+        if (tweet.article) {
+          article = {
+            title: tweet.article.title
+          };
+        }
+
+        return {
+          id: tweet.id,
+          content: tweet.text,
+          created_at: tweet.created_at,
+          author: optimizedAuthor,
+          media: optimizedMedia,
+          quoted_tweet_id: quotedTweetId,
+          quoted_tweet: quotedTweet,
+          poll: poll,
+          article: article,
+          metrics: optimizedMetrics
+        };
+      } catch (error) {
+        logger.error('Failed to fetch optimized tweet', { tweetId, error });
+        return null;
+      }
+    });
+  }
+
+  /**
+   * Batch fetch tweets by IDs and return optimized structure
+   */
+  async getOptimizedTweetsByIds(tweetIds: string[]): Promise<OptimizedTweetResponse> {
+    if (!tweetIds.length) return { tweets: [] };
+    
+    // Calculate how many API requests we'll need
+    const requestsNeeded = Math.ceil(tweetIds.length / 100);
+    
+    return this.makeRateLimitedRequest(async () => {
+      // Use dynamic API selection for this method
+      this.bearerToken = await this.constructBearerToken(true);
+      
+      try {
+        const params = new URLSearchParams({
+          'user.fields': 'username,name,profile_image_url,verified,verified_type,affiliation,entities,connection_status',
+          'media.fields': 'url,preview_image_url,type,width,height,alt_text',
+          'poll.fields': 'duration_minutes,end_datetime,id,options,voting_status',
+          'expansions': 'author_id,attachments.media_keys,referenced_tweets.id,referenced_tweets.id.author_id,referenced_tweets.id.attachments.media_keys',
+          'tweet.fields': 'created_at,author_id,public_metrics,entities,referenced_tweets,attachments',
+          'ids': tweetIds.join(',')
+        });
+
+        const response = await this.makeTwitterRequest(`/tweets?${params.toString()}`);
+        
+        logger.info('Batch tweet fetch response', { 
+          tweetIds, 
+          requestsNeeded,
+          tweetCount: tweetIds.length,
+          response: response
+        });
+        
+        if (!response.data) return { tweets: [] };
+        
+        // Extract users data
+        const usersData: any[] = response.includes?.users || [];
+        const usersMap = new Map<string, any>();
+        
+        usersData.forEach((user: any) => {
+          usersMap.set(user.id, user);
+        });
+        
+        // Extract media data
+        const mediaData: any[] = response.includes?.media || [];
+        const mediaMap = new Map<string, any>();
+        
+        mediaData.forEach((media: any) => {
+          mediaMap.set(media.media_key, media);
+        });
+
+        // Extract poll data
+        const pollData: any[] = response.includes?.polls || [];
+        const pollMap = new Map<string, any>();
+        
+        pollData.forEach((poll: any) => {
+          pollMap.set(poll.id, poll);
+        });
+
+        // Extract quoted tweets data
+        const quotedTweetsData: any[] = response.includes?.tweets || [];
+        const quotedTweetsMap = new Map<string, any>();
+        
+        quotedTweetsData.forEach((tweet: any) => {
+          quotedTweetsMap.set(tweet.id, tweet);
+        });
+        
+        const optimizedTweets: OptimizedTweet[] = response.data.map((tweet: any) => {
+          const author = usersMap.get(tweet.author_id);
+          const metrics = tweet.public_metrics || {};
+          
+          // Build optimized author
+          const optimizedAuthor: OptimizedAuthor = {
+            id: author?.id || tweet.author_id,
+            username: author?.username || 'unknown',
+            name: author?.name || 'Unknown User',
+            profile_picture: author?.profile_image_url || '',
+            verified: author?.verified || false,
+            verification_type: author?.verified_type || 'none',
+            affiliation: author?.affiliation || null
+          };
+
+          // Build optimized metrics
+          const optimizedMetrics: OptimizedMetrics = {
+            replies: typeof metrics.reply_count === 'number' ? metrics.reply_count : 0,
+            retweets: typeof metrics.retweet_count === 'number' ? metrics.retweet_count : 0,
+            likes: typeof metrics.like_count === 'number' ? metrics.like_count : 0,
+            quotes: typeof metrics.quote_count === 'number' ? metrics.quote_count : 0,
+            bookmarks: typeof metrics.bookmark_count === 'number' ? metrics.bookmark_count : 0,
+            impressions: typeof metrics.impression_count === 'number' ? metrics.impression_count : 0
+          };
+
+          // Build optimized media array
+          const optimizedMedia: OptimizedMedia[] = [];
+
+          // Handle media attachments
+          if (tweet.attachments?.media_keys && mediaMap.size > 0) {
+            const mediaKeys = tweet.attachments.media_keys;
+            mediaKeys.forEach((key: string) => {
+              const media = mediaMap.get(key);
+              if (media) {
+                optimizedMedia.push({
+                  type: media.type === 'animated_gif' ? 'gif' : media.type,
+                  url: media.url,
+                  preview_image_url: media.preview_image_url,
+                  width: media.width,
+                  height: media.height,
+                  alt_text: media.alt_text
+                });
+              }
+            });
+          }
+
+          // Handle link previews from entities
+          if (tweet.entities?.urls) {
+            tweet.entities.urls.forEach((url: any) => {
+              if (url.images && url.images.length > 0) {
+                optimizedMedia.push({
+                  type: 'link_preview',
+                  url: url.expanded_url,
+                  title: url.title,
+                  description: url.description,
+                  preview_image_url: url.images[0]?.url,
+                  domain: url.display_url?.split('/')[0] || ''
+                });
+              }
+            });
+          }
+
+          // Handle quoted tweet
+          let quotedTweetId: string | null = null;
+          let quotedTweet: OptimizedQuotedTweet | null = null;
+          if (tweet.referenced_tweets && tweet.referenced_tweets.length > 0) {
+            const quotedTweetRef = tweet.referenced_tweets.find((ref: any) => ref.type === 'quoted');
+            if (quotedTweetRef) {
+              quotedTweetId = quotedTweetRef.id;
+              
+              // Get quoted tweet details from includes
+              const quotedTweetData = quotedTweetsMap.get(quotedTweetRef.id);
+              if (quotedTweetData) {
+                const quotedAuthor = usersMap.get(quotedTweetData.author_id);
+                
+                // Build quoted tweet author
+                const quotedOptimizedAuthor: OptimizedAuthor = {
+                  id: quotedAuthor?.id || quotedTweetData.author_id,
+                  username: quotedAuthor?.username || 'unknown',
+                  name: quotedAuthor?.name || 'Unknown User',
+                  profile_picture: quotedAuthor?.profile_image_url || '',
+                  verified: quotedAuthor?.verified || false,
+                  verification_type: quotedAuthor?.verified_type || 'none',
+                  affiliation: quotedAuthor?.affiliation || null
+                };
+
+                // Build quoted tweet metrics
+                const quotedMetrics = quotedTweetData.public_metrics || {};
+                const quotedOptimizedMetrics: OptimizedMetrics = {
+                  replies: typeof quotedMetrics.reply_count === 'number' ? quotedMetrics.reply_count : 0,
+                  retweets: typeof quotedMetrics.retweet_count === 'number' ? quotedMetrics.retweet_count : 0,
+                  likes: typeof quotedMetrics.like_count === 'number' ? quotedMetrics.like_count : 0,
+                  quotes: typeof quotedMetrics.quote_count === 'number' ? quotedMetrics.quote_count : 0,
+                  bookmarks: typeof quotedMetrics.bookmark_count === 'number' ? quotedMetrics.bookmark_count : 0,
+                  impressions: typeof quotedMetrics.impression_count === 'number' ? quotedMetrics.impression_count : 0
+                };
+
+                // Build quoted tweet media
+                const quotedOptimizedMedia: OptimizedMedia[] = [];
+                
+                // Handle quoted tweet media (if any)
+                if (quotedTweetData.attachments?.media_keys && mediaMap.size > 0) {
+                  const quotedMediaKeys = quotedTweetData.attachments.media_keys;
+                  quotedMediaKeys.forEach((key: string) => {
+                    const media = mediaMap.get(key);
+                    if (media) {
+                      quotedOptimizedMedia.push({
+                        type: media.type === 'animated_gif' ? 'gif' : media.type,
+                        url: media.url,
+                        preview_image_url: media.preview_image_url,
+                        width: media.width,
+                        height: media.height,
+                        alt_text: media.alt_text
+                      });
+                    }
+                  });
+                }
+
+                // Handle quoted tweet link previews
+                if (quotedTweetData.entities?.urls) {
+                  quotedTweetData.entities.urls.forEach((url: any) => {
+                    if (url.images && url.images.length > 0) {
+                      quotedOptimizedMedia.push({
+                        type: 'link_preview',
+                        url: url.expanded_url,
+                        title: url.title,
+                        description: url.description,
+                        preview_image_url: url.images[0]?.url,
+                        domain: url.display_url?.split('/')[0] || ''
+                      });
+                    }
+                  });
+                }
+
+                // Handle quoted tweet article
+                let quotedArticle: OptimizedArticle | null = null;
+                if (quotedTweetData.article) {
+                  quotedArticle = {
+                    title: quotedTweetData.article.title
+                  };
+                }
+
+                quotedTweet = {
+                  id: quotedTweetData.id,
+                  content: quotedTweetData.text,
+                  created_at: quotedTweetData.created_at,
+                  author: quotedOptimizedAuthor,
+                  media: quotedOptimizedMedia,
+                  article: quotedArticle,
+                  metrics: quotedOptimizedMetrics
+                };
+              }
+            }
+          }
+
+          // Handle poll
+          let poll: OptimizedPoll | null = null;
+          if (tweet.attachments?.poll_ids && pollMap.size > 0) {
+            const pollId = tweet.attachments.poll_ids[0];
+            const pollData = pollMap.get(pollId);
+            if (pollData) {
+              poll = {
+                id: pollData.id,
+                question: 'Poll Question', // Twitter API doesn't provide poll question in this endpoint
+                options: pollData.options?.map((option: any, index: number) => ({
+                  position: index + 1,
+                  label: option.label,
+                  votes: option.votes || 0
+                })) || [],
+                end_datetime: pollData.end_datetime,
+                voting_status: pollData.voting_status
+              };
+            }
+          }
+
+          // Handle article
+          let article: OptimizedArticle | null = null;
+          if (tweet.article) {
+            article = {
+              title: tweet.article.title
+            };
+          }
+
+          return {
+            id: tweet.id,
+            content: tweet.text,
+            created_at: tweet.created_at,
+            author: optimizedAuthor,
+            media: optimizedMedia,
+            quoted_tweet_id: quotedTweetId,
+            quoted_tweet: quotedTweet,
+            poll: poll,
+            article: article,
+            metrics: optimizedMetrics
+          };
+        });
+        
+        return { tweets: optimizedTweets };
+      } catch (error) {
+        logger.error('Failed to batch fetch optimized tweets', { tweetIds, error });
+        return { tweets: [] };
       }
     }, requestsNeeded);
   }

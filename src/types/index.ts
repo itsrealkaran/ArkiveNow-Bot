@@ -55,6 +55,86 @@ export interface TwitterTweet {
   };
 }
 
+// Optimized Tweet Types for New Structure
+export interface OptimizedAuthor {
+  id: string;
+  username: string;
+  name: string;
+  profile_picture: string;
+  verified: boolean;
+  verification_type: 'blue' | 'blue_verified' | 'business' | 'government' | 'none';
+  affiliation?: {
+    badge_url: string;
+    url: string;
+    description: string;
+  } | null;
+}
+
+export interface OptimizedMedia {
+  type: 'photo' | 'video' | 'gif' | 'link_preview';
+  url?: string;
+  preview_image_url?: string;
+  width?: number;
+  height?: number;
+  alt_text?: string;
+  // For link previews
+  title?: string;
+  description?: string;
+  domain?: string;
+}
+
+export interface OptimizedPoll {
+  id: string;
+  question: string;
+  options: Array<{
+    position: number;
+    label: string;
+    votes: number;
+  }>;
+  end_datetime: string;
+  voting_status: 'open' | 'closed';
+}
+
+export interface OptimizedMetrics {
+  replies: number;
+  retweets: number;
+  likes: number;
+  quotes: number;
+  bookmarks: number;
+  impressions: number;
+}
+
+export interface OptimizedArticle {
+  title: string;
+}
+
+export interface OptimizedQuotedTweet {
+  id: string;
+  content: string;
+  created_at: string;
+  author: OptimizedAuthor;
+  media: OptimizedMedia[];
+  article?: OptimizedArticle | null;
+  metrics: OptimizedMetrics;
+}
+
+export interface OptimizedTweet {
+  id: string;
+  content: string;
+  created_at: string;
+  author: OptimizedAuthor;
+  media: OptimizedMedia[];
+  quoted_tweet_id: string | null;
+  quoted_tweet?: OptimizedQuotedTweet | null;
+  poll: OptimizedPoll | null;
+  article?: OptimizedArticle | null;
+  metrics: OptimizedMetrics;
+}
+
+export interface OptimizedTweetResponse {
+  tweets: OptimizedTweet[];
+}
+
 // Database Types
 export interface User {
   id: string;

@@ -21,13 +21,7 @@ async function testTwitterV2() {
     const mentions = await twitterService.getMentions();
     logger.info('Mentions test result:', { 
       count: mentions.length,
-      mentions: mentions,
-      sample: mentions.slice(0, 2).map(m => ({
-        id: m.id,
-        text: m.text?.substring(0, 100) + '...',
-        author_id: m.author_id,
-        referenced_tweets: m.referenced_tweets,
-      }))
+      mentions: mentions
     });
 
     // Test 3: Extract tweet IDs from mentions and fetch them
@@ -68,13 +62,14 @@ async function testTwitterV2() {
         tweetIds: uniqueTweetIds
       });
       
-      // Fetch the tweets using batch API
+      // Fetch the tweets using optimized batch API
       if (uniqueTweetIds.length > 0) {
-        logger.info('Fetching tweets using batch API...');
-        const fetchedTweets = await twitterService.getTweetsByIds(uniqueTweetIds);
+        logger.info('Fetching tweets using optimized batch API...');
+        const optimizedResponse = await twitterService.getOptimizedTweetsByIds(uniqueTweetIds);
         
-        logger.info('Batch fetch result:', {
-          tweets: fetchedTweets
+        logger.info('Optimized batch fetch result:', {
+          tweetCount: optimizedResponse.tweets.length,
+          tweets: optimizedResponse.tweets
         });
       } else {
         logger.info('No tweet IDs found in mentions to fetch');
@@ -101,6 +96,8 @@ async function testTwitterV2() {
       parentId,
       hasReferencedTweets: !!testMention.referenced_tweets
     });
+
+
 
 
 

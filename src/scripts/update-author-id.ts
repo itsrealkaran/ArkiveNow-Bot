@@ -45,20 +45,29 @@ async function updateAuthorIds() {
       let skippedCount = 0;
 
       for (const row of tweetsToUpdate.rows) {
-        // Skip if the author_id is already correct
-        if (row.current_author_id === row.correct_author_id) {
+        // Skip if the author_id is already correct and username is already correct
+        const userRes = await client.query('SELECT username FROM users WHERE author_id = $1', [row.correct_author_id]);
+        const correctUsername = userRes.rows[0]?.username || null;
+        const tweetRes = await client.query('SELECT username FROM tweets WHERE id = $1', [row.id]);
+        const currentUsername = tweetRes.rows[0]?.username || null;
+        let updated = false;
+        if (row.current_author_id !== row.correct_author_id) {
+          await client.query(
+            'UPDATE tweets SET author_id = $1, username = $2, updated_at = NOW() WHERE id = $3',
+            [row.correct_author_id, correctUsername, row.id]
+          );
+          updated = true;
+        } else if (currentUsername !== correctUsername) {
+          await client.query(
+            'UPDATE tweets SET username = $1, updated_at = NOW() WHERE id = $2',
+            [correctUsername, row.id]
+          );
+          updated = true;
+        } else {
           skippedCount++;
           continue;
         }
-
-        // Update the tweet's author_id
-        await client.query(
-          'UPDATE tweets SET author_id = $1, updated_at = NOW() WHERE id = $2',
-          [row.correct_author_id, row.id]
-        );
-
-        updatedCount++;
-        
+        if (updated) updatedCount++;
         if (updatedCount % 100 === 0) {
           logger.info(`🔄 Updated ${updatedCount} tweets so far...`);
         }
