@@ -99,7 +99,6 @@ class DatabaseService {
           public_metrics JSONB,
           author_data JSONB,
           media_data JSONB,
-          referenced_tweets JSONB,
           includes_data JSONB,
           screenshot_arweave_id VARCHAR(255),
           screenshot_created_at TIMESTAMP WITH TIME ZONE,
@@ -108,6 +107,16 @@ class DatabaseService {
           created_at_db TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
+      `);
+
+      // Remove referenced_tweets column if it exists
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tweets' AND column_name='referenced_tweets') THEN
+            ALTER TABLE tweets DROP COLUMN referenced_tweets;
+          END IF;
+        END$$;
       `);
 
       // Add username column if it doesn't exist
@@ -361,7 +370,6 @@ class DatabaseService {
     public_metrics?: any;
     author_data?: any;
     media_data?: any;
-    referenced_tweets?: any;
     includes_data?: any;
   }): Promise<void> {
     const client = await this.pool.connect();
@@ -369,8 +377,8 @@ class DatabaseService {
       await client.query(
         `INSERT INTO tweets (
           tweet_id, author_id, username, text, created_at, public_metrics, 
-          author_data, media_data, referenced_tweets, includes_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          author_data, media_data, includes_data
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (tweet_id) DO UPDATE SET
           author_id = EXCLUDED.author_id,
           username = EXCLUDED.username,
@@ -378,7 +386,6 @@ class DatabaseService {
           public_metrics = EXCLUDED.public_metrics,
           author_data = EXCLUDED.author_data,
           media_data = EXCLUDED.media_data,
-          referenced_tweets = EXCLUDED.referenced_tweets,
           includes_data = EXCLUDED.includes_data,
           updated_at = NOW()`,
         [
@@ -390,7 +397,6 @@ class DatabaseService {
           JSON.stringify(tweetData.public_metrics),
           JSON.stringify(tweetData.author_data),
           JSON.stringify(tweetData.media_data),
-          JSON.stringify(tweetData.referenced_tweets),
           JSON.stringify(tweetData.includes_data)
         ]
       );
@@ -402,14 +408,27 @@ class DatabaseService {
 
   async getTweetByTweetId(tweetId: string): Promise<any> {
     const client = await this.pool.connect();
-    
     try {
       const result = await client.query(
         'SELECT * FROM tweets WHERE tweet_id = $1',
         [tweetId]
       );
-      
-      return result.rows[0] || null;
+      const row = result.rows[0] || null;
+      if (!row) return null;
+      // Reconstruct OptimizedTweet from DB row
+      const includes = row.includes_data || {};
+      return {
+        id: row.tweet_id,
+        content: row.text,
+        created_at: row.created_at,
+        metrics: row.public_metrics,
+        author: row.author_data,
+        media: row.media_data,
+        quoted_tweet_id: includes.quoted_tweet_id || null,
+        quoted_tweet: includes.quoted_tweet || null,
+        poll: includes.poll || null,
+        article: includes.article || null
+      };
     } finally {
       client.release();
     }

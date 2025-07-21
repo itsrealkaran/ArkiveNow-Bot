@@ -1,6 +1,6 @@
 import path from 'path';
 import fs, { truncate } from 'fs/promises';
-import { ScreenshotResult, ScreenshotOptions, TwitterTweet } from '../types';
+import { ScreenshotResult, ScreenshotOptions, OptimizedTweet } from '../types';
 import { botConfig } from '../config';
 import logger from '../utils/logger';
 import puppeteer from 'puppeteer';
@@ -13,7 +13,7 @@ class ScreenshotService {
   }
 
   async takeScreenshot(
-    tweet: TwitterTweet,
+    tweet: OptimizedTweet,
     options: ScreenshotOptions = {}
   ): Promise<ScreenshotResult> {
     try {
@@ -41,9 +41,7 @@ class ScreenshotService {
       await page.setContent(templateHtml, { waitUntil: 'networkidle0' });
       // Inject tweet data and render
       await page.evaluate((tweetData: any) => {
-        // @ts-expect-error: window is defined in browser context
         (window as any).tweetData = tweetData;
-        // @ts-expect-error: window is defined in browser context
         if ((window as any).renderTweet) (window as any).renderTweet(tweetData);
       }, tweet);
       // Wait for tweet card to render
@@ -51,43 +49,30 @@ class ScreenshotService {
       
       // Wait for all images to load properly with better error handling
       await page.evaluate(async () => {
-        // @ts-expect-error: document is defined in browser context
-        const tweetEl = document.querySelector('.tweet-card');
+        const tweetEl = (document.querySelector('.tweet-card') as any);
         if (!tweetEl) return;
-        
         const images = tweetEl.querySelectorAll('img');
         if (images.length === 0) return;
-        
-        // Wait for all images to load with proper error handling
         await Promise.all(Array.from(images).map((img, index) => {
           return new Promise<void>((resolve) => {
-            // @ts-expect-error: HTMLImageElement is defined in browser context
-            const imgElement = img as HTMLImageElement;
-            
-            // If image is already loaded
+            const imgElement = img as any;
             if (imgElement.complete && imgElement.naturalWidth > 0) {
               resolve();
               return;
             }
-            
-            // Set up load and error handlers
             const handleLoad = () => {
               imgElement.removeEventListener('load', handleLoad);
               imgElement.removeEventListener('error', handleError);
               resolve();
             };
-            
             const handleError = () => {
               console.warn(`Image failed to load: ${imgElement.src}`);
               imgElement.removeEventListener('load', handleLoad);
               imgElement.removeEventListener('error', handleError);
-              resolve(); // Resolve even on error to continue
+              resolve();
             };
-            
             imgElement.addEventListener('load', handleLoad, { once: true });
             imgElement.addEventListener('error', handleError, { once: true });
-            
-            // Timeout after 10 seconds
             setTimeout(() => {
               imgElement.removeEventListener('load', handleLoad);
               imgElement.removeEventListener('error', handleError);
@@ -96,28 +81,19 @@ class ScreenshotService {
             }, 500);
           });
         }));
-        
-        // Additional wait to ensure images are fully rendered
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Final check - verify all images are properly loaded
         const finalImages = tweetEl.querySelectorAll('img');
         const loadedImages = Array.from(finalImages).filter(img => {
-          // @ts-expect-error: HTMLImageElement is defined in browser context
-          const imgElement = img as HTMLImageElement;
+          const imgElement = img as any;
           return imgElement.complete && imgElement.naturalWidth > 0;
         });
-        
         console.log(`Image loading status: ${loadedImages.length}/${finalImages.length} images loaded successfully`);
       });
       
       // Take screenshot with html2canvas
       const dataUrl = await page.evaluate(async () => {
-        // @ts-expect-error: document is defined in browser context
-        const tweetEl = document.querySelector('.tweet-card');
+        const tweetEl = (document.querySelector('.tweet-card') as any);
         if (!tweetEl) throw new Error('Tweet element not found');
-        
-        // @ts-expect-error: window is defined in browser context
         const canvas = await (window as any).html2canvas(tweetEl, { 
           backgroundColor: '#fff', 
           scale: 2,
@@ -125,7 +101,6 @@ class ScreenshotService {
           allowTaint: true,
           logging: false
         });
-        
         return canvas.toDataURL('image/png');
       });
       // Convert data URL to buffer

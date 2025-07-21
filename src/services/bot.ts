@@ -1,11 +1,13 @@
-import { TwitterMention, TwitterTweet, TwitterUser, BotResponse, QuotaCheck } from '../types';
+import { TwitterMention, TwitterTweet, TwitterUser, BotResponse, QuotaCheck, OptimizedTweet } from '../types';
 import { TweetParser, ParsedMention } from '../utils/tweetParser';
 import twitterService from './twitter';
+import twitterScraperService from './twitter-scraper';
 import screenshotService from './screenshot';
 import arweaveService from './arweave';
 import quotaService from './quota';
 import databaseService from './database';
 import logger from '../utils/logger';
+import twitterV2Service from './twitter-v2';
 
 class BotService {
   private isProcessing = false;
@@ -20,11 +22,36 @@ class BotService {
   async start(): Promise<void> {
     logger.info('🚀 Starting bot service...');
 
-    // Start polling for mentions
-    await twitterService.startPolling(async (mentions) => {
-      await this.processMentionsBatch(mentions);
-    });
-
+    // Start polling for mentions using the scraper
+    const poll = async () => {
+      try {
+        // Get the latest tweet and mention timestamps from the database
+        const latestTweetTime = await databaseService.getLatestTweetTimestamp();
+        const latestMentionTime = await databaseService.getLatestMentionTimestamp();
+        let lastCheckedTime: string | undefined = undefined;
+        if (latestTweetTime && latestMentionTime) {
+          lastCheckedTime = new Date(Math.max(new Date(latestTweetTime).getTime(), new Date(latestMentionTime).getTime())).toISOString();
+        } else if (latestTweetTime) {
+          lastCheckedTime = new Date(latestTweetTime).toISOString();
+        } else if (latestMentionTime) {
+          lastCheckedTime = new Date(latestMentionTime).toISOString();
+        }
+        // Optionally, you can pass a lastCheckedTime here
+        const mentions = await twitterScraperService.getMentions(lastCheckedTime);
+        // Map ScrapedMention[] to TwitterMention[]
+        const mappedMentions = mentions.map(m => ({
+          ...m,
+          in_reply_to_user_id: m.in_reply_to_user_id || '',
+        }));
+        await this.processMentionsBatch(mappedMentions);
+      } catch (error) {
+        logger.error('Error in scraper polling cycle', { error });
+      }
+    };
+    // Initial poll
+    await poll();
+    // Set up interval
+    setInterval(poll, 15 * 60 * 1000); // 15 minutes, or use botConfig.pollingInterval
     logger.info('✅ Bot service started successfully');
   }
 
@@ -65,7 +92,7 @@ class BotService {
     }
 
     // Step 2: Batch fetch tweets
-    const tweets = await twitterService.getTweetsByIds(uniqueTweetIds);
+    const { tweets }: { tweets: OptimizedTweet[] } = await twitterV2Service.getOptimizedTweetsByIds(uniqueTweetIds);
     console.log('tweets:', tweets);
     logger.info('Batch fetched tweets', { tweetIds: uniqueTweetIds, tweets });
     const tweetMap = new Map(tweets.map(tweet => [tweet.id, tweet]));
@@ -89,15 +116,19 @@ class BotService {
       try {
         await databaseService.storeTweet({
           tweet_id: tweet.id,
-          author_id: mention.author_id,
-          username: mention.author?.username || '',
-          text: tweet.text,
+          author_id: tweet.author.id,
+          username: tweet.author.username || '',
+          text: tweet.content,
           created_at: tweet.created_at,
-          public_metrics: tweet.public_metrics,
+          public_metrics: tweet.metrics,
           author_data: tweet.author,
           media_data: tweet.media,
-          referenced_tweets: tweet.referenced_tweets,
-          includes_data: tweet.includes
+          includes_data: {
+            quoted_tweet_id: tweet.quoted_tweet_id || null,
+            quoted_tweet: tweet.quoted_tweet || null,
+            poll: tweet.poll || null,
+            article: tweet.article || null
+          }
         });
         
         // Update processing status to processing
@@ -124,16 +155,17 @@ class BotService {
         
         try {
           // Reconstruct tweet object from stored data
-          const tweet: TwitterTweet = {
+          const tweet: OptimizedTweet = {
             id: tweetData.tweet_id,
-            author_id: tweetData.author_id,
-            text: tweetData.text,
+            content: tweetData.text,
             created_at: tweetData.created_at,
-            public_metrics: tweetData.public_metrics,
+            metrics: tweetData.public_metrics,
             author: tweetData.author_data,
             media: tweetData.media_data,
-            referenced_tweets: tweetData.referenced_tweets,
-            includes: tweetData.includes_data
+            quoted_tweet_id: tweetData.includes_data?.quoted_tweet_id || null,
+            quoted_tweet: tweetData.includes_data?.quoted_tweet || null,
+            poll: tweetData.includes_data?.poll || null,
+            article: tweetData.includes_data?.article || null
           };
 
           // Take screenshot again (since we don't store screenshots)
@@ -147,8 +179,8 @@ class BotService {
           const uploadResult = await arweaveService.uploadScreenshot(
             screenshotResult,
             tweet.id,
-            tweet.author_id,
-            tweet.text
+            tweet.author.id,
+            tweet.content
           );
 
           if (uploadResult.success && uploadResult.id) {
@@ -170,13 +202,12 @@ class BotService {
         
         try {
           // Refetch tweet data from Twitter
-          const tweets = await twitterService.getTweetsByIds([tweetData.tweet_id]);
-          if (tweets.length === 0) {
+          const { tweets: retryTweets } = await twitterV2Service.getOptimizedTweetsByIds([tweetData.tweet_id]);
+          if (retryTweets.length === 0) {
             await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'fetch_failed', undefined, 'Tweet not found on retry');
             continue;
           }
-
-          const tweet = tweets[0];
+          const tweet = retryTweets[0];
           if (!tweet) {
             await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'fetch_failed', undefined, 'Tweet not found on retry');
             continue;
@@ -186,13 +217,17 @@ class BotService {
             tweet_id: tweet.id,
             author_id: tweetData.author_id, // Keep the original requester's author_id from stored data
             username: tweet.author?.username || '',
-            text: tweet.text,
+            text: tweet.content,
             created_at: tweet.created_at,
-            public_metrics: tweet.public_metrics,
+            public_metrics: tweet.metrics,
             author_data: tweet.author,
             media_data: tweet.media,
-            referenced_tweets: tweet.referenced_tweets,
-            includes_data: tweet.includes
+            includes_data: {
+              quoted_tweet_id: tweet.quoted_tweet_id || null,
+              quoted_tweet: tweet.quoted_tweet || null,
+              poll: tweet.poll || null,
+              article: tweet.article || null
+            }
           });
 
           // Process the tweet normally
@@ -209,13 +244,12 @@ class BotService {
         
         try {
           // Refetch tweet data from Twitter
-          const tweets = await twitterService.getTweetsByIds([tweetData.tweet_id]);
-          if (tweets.length === 0) {
+          const { tweets: retryOtherTweets } = await twitterV2Service.getOptimizedTweetsByIds([tweetData.tweet_id]);
+          if (retryOtherTweets.length === 0) {
             await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'other_failed', undefined, 'Tweet not found on retry');
             continue;
           }
-
-          const tweet = tweets[0];
+          const tweet = retryOtherTweets[0];
           if (!tweet) {
             await databaseService.updateTweetProcessingStatus(tweetData.tweet_id, 'other_failed', undefined, 'Tweet not found on retry');
             continue;
@@ -225,13 +259,17 @@ class BotService {
             tweet_id: tweet.id,
             author_id: tweetData.author_id, // Keep the original requester's author_id from stored data
             username: tweet.author?.username || '',
-            text: tweet.text,
+            text: tweet.content,
             created_at: tweet.created_at,
-            public_metrics: tweet.public_metrics,
+            public_metrics: tweet.metrics,
             author_data: tweet.author,
             media_data: tweet.media,
-            referenced_tweets: tweet.referenced_tweets,
-            includes_data: tweet.includes
+            includes_data: {
+              quoted_tweet_id: tweet.quoted_tweet_id || null,
+              quoted_tweet: tweet.quoted_tweet || null,
+              poll: tweet.poll || null,
+              article: tweet.article || null
+            }
           });
 
           // Process the tweet normally
@@ -249,10 +287,15 @@ class BotService {
   /**
    * Process a tweet for retry (without mention context)
    */
-  async processTweetForRetry(tweet: TwitterTweet): Promise<void> {
+  async processTweetForRetry(tweet: OptimizedTweet): Promise<void> {
     try {
       // Check if tweet is public
-      const isPublic = await twitterService.isPublicTweet(tweet);
+      const isPublic = await twitterService.isPublicTweet({
+        id: tweet.id,
+        text: tweet.content,
+        author_id: tweet.author.id,
+        created_at: tweet.created_at
+      });
       if (!isPublic) {
         await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, 'Cannot screenshot private tweets');
         return;
@@ -269,8 +312,8 @@ class BotService {
       const uploadResult = await arweaveService.uploadScreenshot(
         screenshotResult,
         tweet.id,
-        tweet.author_id,
-        tweet.text
+        tweet.author.id,
+        tweet.content
       );
 
       if (uploadResult.success && uploadResult.id) {
@@ -289,7 +332,7 @@ class BotService {
   /**
    * Process a single mention with its tweet (refactored from processMention)
    */
-  async processMentionWithTweet(mention: TwitterMention, tweet: TwitterTweet): Promise<void> {
+  async processMentionWithTweet(mention: TwitterMention, tweet: OptimizedTweet): Promise<void> {
     if (this.isProcessing) {
       logger.info('Bot is already processing a mention, skipping', { mentionId: mention.id });
       return;
@@ -309,10 +352,14 @@ class BotService {
         return;
       }
       // Step 4: Check if tweet is public
-      const isPublic = await twitterService.isPublicTweet(tweet);
+      const isPublic = await twitterService.isPublicTweet({
+        id: tweet.id,
+        text: tweet.content,
+        author_id: tweet.author.id,
+        created_at: tweet.created_at
+      });
       if (!isPublic) {
         await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, 'Cannot screenshot private tweets');
-        // Don't reply immediately, will retry in next cycle
         logger.warn('Private tweet, will retry in next cycle', { tweetId: tweet.id });
         return;
       }
@@ -320,7 +367,6 @@ class BotService {
       const screenshotResult = await screenshotService.takeScreenshot(tweet, {});
       if (!screenshotResult.success || !screenshotResult.buffer) {
         await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, `Screenshot failed: ${screenshotResult.error}`);
-        // Don't reply immediately, will retry in next cycle
         logger.warn('Screenshot failed, will retry in next cycle', { tweetId: tweet.id, error: screenshotResult.error });
         return;
       }
@@ -328,12 +374,11 @@ class BotService {
       const uploadResult = await arweaveService.uploadScreenshot(
         screenshotResult,
         tweet.id,
-        tweet.author_id,
-        tweet.text
+        tweet.author.id,
+        tweet.content
       );
       if (!uploadResult.success || !uploadResult.id) {
         await databaseService.updateTweetProcessingStatus(tweet.id, 'upload_failed', undefined, `Upload failed: ${uploadResult.error}`);
-        // Don't reply immediately, will retry upload in next cycle
         logger.warn('Upload failed, will retry upload in next cycle', { tweetId: tweet.id, error: uploadResult.error });
         return;
       }
@@ -341,7 +386,6 @@ class BotService {
       await quotaService.incrementUserQuota(mention.author_id);
       // Step 8: Update tweet processing status to completed
       await databaseService.updateTweetProcessingStatus(tweet.id, 'completed', uploadResult.id);
-      
       // Step 9: Log successful usage
       await databaseService.logUsage({
         user_id: mention.author_id,
@@ -350,7 +394,7 @@ class BotService {
         arweave_id: uploadResult.id,
       });
       // Step 10: Reply with success message
-      const authorUsername = tweet.author?.username || tweet.author_id;
+      const authorUsername = tweet.author?.username || tweet.author.id;
       const requester = mention.author?.username || mention.author_id;
       await this.handleSuccess(mention, uploadResult.id, tweet.id, authorUsername, requester, screenshotResult.buffer);
       logger.info('Successfully processed mention', {
@@ -362,7 +406,6 @@ class BotService {
     } catch (error) {
       logger.error('Error processing mention', { mentionId: mention.id, error });
       await databaseService.updateTweetProcessingStatus(tweet.id, 'other_failed', undefined, 'An unexpected error occurred while processing your request');
-      // Don't reply immediately, will retry in next cycle
       logger.warn('Unexpected error, will retry in next cycle', { tweetId: tweet.id, error });
     } finally {
       this.isProcessing = false;
