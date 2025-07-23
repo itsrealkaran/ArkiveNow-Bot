@@ -35,19 +35,20 @@ class BotService {
           return;
         }
         // Get the latest tweet and mention timestamps from the database
-        const latestTweetTime = await databaseService.getLatestTweetTimestamp();
-        const latestMentionTime = await databaseService.getLatestMentionTimestamp();
-        let lastCheckedTime: string | undefined = undefined;
-        if (latestTweetTime && latestMentionTime) {
-          lastCheckedTime = new Date(Math.max(new Date(latestTweetTime).getTime(), new Date(latestMentionTime).getTime())).toISOString();
-        } else if (latestTweetTime) {
-          lastCheckedTime = new Date(latestTweetTime).toISOString();
-        } else if (latestMentionTime) {
-          lastCheckedTime = new Date(latestMentionTime).toISOString();
-        } else {
-          // Default to 24h ago
-          lastCheckedTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        }
+        // const latestTweetTime = await databaseService.getLatestTweetTimestamp();
+        // const latestMentionTime = await databaseService.getLatestMentionTimestamp();
+        // let lastCheckedTime: string | undefined = undefined;
+        // if (latestTweetTime && latestMentionTime) {
+        //   lastCheckedTime = new Date(Math.max(new Date(latestTweetTime).getTime(), new Date(latestMentionTime).getTime())).toISOString();
+        // } else if (latestTweetTime) {
+        //   lastCheckedTime = new Date(latestTweetTime).toISOString();
+        // } else if (latestMentionTime) {
+        //   lastCheckedTime = new Date(latestMentionTime).toISOString();
+        // } else {
+        //   // Default to 24h ago
+        //   lastCheckedTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        // }
+        const lastCheckedTime = "2025-07-23T21:14:30.000Z";
         logger.info(`Using lastCheckedTime: ${lastCheckedTime}`);
         const mentions = await twitterScraperService.getMentions(lastCheckedTime);
         // Map ScrapedMention[] to TwitterMention[]
@@ -128,8 +129,8 @@ class BotService {
       try {
         await databaseService.storeTweet({
           tweet_id: tweet.id,
-          author_id: tweet.author.id,
-          username: tweet.author.username || '',
+          author_id: mention.id,
+          username: mention.author?.username || '',
           text: tweet.content,
           created_at: tweet.created_at,
           public_metrics: tweet.metrics,

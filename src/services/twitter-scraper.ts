@@ -574,7 +574,11 @@ class TwitterScraperService {
             if (lastCheckedTime && timestamp < lastCheckedTime) break;
             // Extract user information
             const userLink = article.querySelector('a[href^="/"][role="link"]') as HTMLAnchorElement;
-            const username = userLink?.href?.replace('/', '') || '';
+            let username: string = '';
+            if (userLink && typeof userLink.href === 'string') {
+              const match = userLink.href.match(/(?:https?:\/\/)?(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)(?:[/?#]|$)/i);
+              username = match && match[1] ? match[1] : '';
+            }
             const nameElement = article.querySelector('[data-testid="User-Name"] span');
             const name = nameElement?.textContent || username;
             // Extract profile picture

@@ -39,8 +39,8 @@ class DatabaseService {
       await client.query(`
         CREATE TABLE IF NOT EXISTS users (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          author_id VARCHAR(32) UNIQUE NOT NULL,
-          username VARCHAR,
+          author_id VARCHAR(32) NOT NULL,
+          username VARCHAR UNIQUE NOT NULL,
           name VARCHAR,
           profile_image_url VARCHAR,
           verified BOOLEAN,
@@ -734,6 +734,47 @@ class DatabaseService {
     try {
       await client.query('DELETE FROM apis WHERE id = $1', [apiId]);
       logger.info('Deleted API configuration', { apiId });
+    } finally {
+      client.release();
+    }
+  }
+
+  async migrate(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      logger.info('Running database migration...');
+      // Ensure unique index on users(username)
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+      `);
+      // Remove unique index on users(author_id) if it exists
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'users' AND indexname = 'idx_users_author_id') THEN
+            DROP INDEX idx_users_author_id;
+          END IF;
+        END$$;
+      `);
+      // Remove UNIQUE constraint from author_id if it exists
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_name = 'users'
+              AND constraint_type = 'UNIQUE'
+              AND constraint_name = 'users_author_id_key'
+          ) THEN
+            ALTER TABLE users DROP CONSTRAINT users_author_id_key;
+          END IF;
+        END$$;
+      `);
+      // Ensure unique index on tweets(tweet_id)
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tweets_tweet_id ON tweets(tweet_id);
+      `);
+      logger.info('✅ Database migration completed successfully');
     } finally {
       client.release();
     }
