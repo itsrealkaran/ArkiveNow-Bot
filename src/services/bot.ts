@@ -25,6 +25,15 @@ class BotService {
     // Start polling for mentions using the scraper
     const poll = async () => {
       try {
+        // Restore session before fetching mentions
+        logger.info('Restoring Twitter scraper session...');
+        const sessionLoaded = await twitterScraperService.loadSession();
+        const sessionRestored = sessionLoaded ? await twitterScraperService.restoreSession() : false;
+        logger.info('Session restoration result:', { loaded: sessionLoaded, restored: sessionRestored });
+        if (!sessionRestored) {
+          logger.warn('No valid session found. Skipping mention fetch.');
+          return;
+        }
         // Get the latest tweet and mention timestamps from the database
         const latestTweetTime = await databaseService.getLatestTweetTimestamp();
         const latestMentionTime = await databaseService.getLatestMentionTimestamp();
@@ -35,8 +44,11 @@ class BotService {
           lastCheckedTime = new Date(latestTweetTime).toISOString();
         } else if (latestMentionTime) {
           lastCheckedTime = new Date(latestMentionTime).toISOString();
+        } else {
+          // Default to 24h ago
+          lastCheckedTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
         }
-        // Optionally, you can pass a lastCheckedTime here
+        logger.info(`Using lastCheckedTime: ${lastCheckedTime}`);
         const mentions = await twitterScraperService.getMentions(lastCheckedTime);
         // Map ScrapedMention[] to TwitterMention[]
         const mappedMentions = mentions.map(m => ({

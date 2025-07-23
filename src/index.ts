@@ -3,7 +3,7 @@ import logger from './utils/logger';
 import databaseService from './services/database';
 import twitterService from './services/twitter';
 import screenshotService from './services/screenshot';
-import botService from './services/bot';
+import botService from './scripts/test-bot';
 
 // Main entry point for the Twitter Screenshot Bot
 async function main() {

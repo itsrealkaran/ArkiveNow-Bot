@@ -508,7 +508,16 @@ class TwitterScraperService {
    */
   async getMentions(lastCheckedTime?: string): Promise<ScrapedMention[]> {
     if (!this.isLoggedIn) {
-      throw new Error('Not logged in to X.com');
+      // Load credentials from env only
+      const username = process.env.TWITTER_SCRAPER_USERNAME;
+      const password = process.env.TWITTER_SCRAPER_PASSWORD;
+      if (!username || !password) {
+        throw new Error('Twitter scraper credentials not set in environment variables');
+      }
+      const loginSuccess = await this.login(username, password);
+      if (!loginSuccess) {
+        throw new Error('Failed to login to X.com');
+      }
     }
     if (!this.page) {
       throw new Error('Page not initialized');
