@@ -326,9 +326,9 @@ class DatabaseService {
     }
   }
 
-  async upsertUserByAuthorId(user: {
-    author_id: string;
-    username?: string;
+  async upsertUserByUsername(user: {
+    username: string;
+    author_id?: string;
     name?: string;
     profile_image_url?: string;
     verified?: boolean;
@@ -336,24 +336,24 @@ class DatabaseService {
     const client = await this.pool.connect();
     try {
       const result = await client.query(
-        `INSERT INTO users (author_id, username, name, profile_image_url, verified, created_at, updated_at)
+        `INSERT INTO users (username, author_id, name, profile_image_url, verified, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-         ON CONFLICT (author_id) DO UPDATE SET
-           username = EXCLUDED.username,
+         ON CONFLICT (username) DO UPDATE SET
+           author_id = EXCLUDED.author_id,
            name = EXCLUDED.name,
            profile_image_url = EXCLUDED.profile_image_url,
            verified = EXCLUDED.verified,
            updated_at = NOW()
          RETURNING *`,
         [
-          user.author_id,
-          user.username || null,
+          user.username,
+          user.author_id || null,
           user.name || null,
           user.profile_image_url || null,
           user.verified ?? null
         ]
       );
-      logger.info('Upserted user', { authorId: user.author_id, userId: result.rows[0].id });
+      logger.info('Upserted user', { username: user.username, userId: result.rows[0].id });
       return result.rows[0];
     } finally {
       client.release();
