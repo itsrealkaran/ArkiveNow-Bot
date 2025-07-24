@@ -23,10 +23,10 @@ async function main() {
 
     // Initialize Twitter service
     logger.info('🐦 Initializing Twitter service...');
-    const credentialsValid = await twitterService.verifyCredentials();
-    if (!credentialsValid) {
-      throw new Error('Twitter credentials are invalid');
-    }
+    // const credentialsValid = await twitterService.verifyCredentials();
+    // if (!credentialsValid) {
+    //   throw new Error('Twitter credentials are invalid');
+    // }
     logger.info('✅ Twitter service initialized successfully');
 
     // Initialize screenshot service

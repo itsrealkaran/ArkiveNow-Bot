@@ -82,7 +82,7 @@ class TwitterScraperService {
 
     try {
       this.browser = await puppeteer.launch({
-        headless: true, // Set to false for debugging
+        headless: false, // Set to false for debugging
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -549,7 +549,7 @@ class TwitterScraperService {
         await this.autoScroll();
       }
       // Extract mentions
-      const mentions = await this.page.evaluate((lastId, lastCheckedTime) => {
+      let mentions = await this.page.evaluate((lastId, lastCheckedTime) => {
         const tweets: ScrapedMention[] = [];
         const tweetsToInspect: string[] = [];
         const articles = Array.from(document.querySelectorAll('article[data-testid="tweet"]'));
@@ -694,6 +694,172 @@ class TwitterScraperService {
       // Sort by created_at descending (newest first)
       tweets.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
       logger.info('Scraped mentions', { count: tweets.length });
+      // If no new mentions, perform a hard reload and try again
+      if (!tweets || tweets.length === 0) {
+        logger.info('No new mentions found, performing hard reload...');
+        const client = await this.page.target().createCDPSession();
+        await client.send('Network.clearBrowserCache');
+        await this.page.reload({ waitUntil: 'networkidle0' });
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Wait for tweets to load again
+        try {
+          await this.page.waitForSelector('article[data-testid="tweet"]', { timeout: 10000 });
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        } catch (error) {
+          logger.warn('No tweets found after hard reload');
+        }
+        // Re-run scroll and extraction
+        if (lastCheckedTime) {
+          await this.autoScrollUntilTime(lastCheckedTime);
+        } else {
+          await this.autoScroll();
+        }
+        // Extract mentions again
+        const mentionsReload = await this.page.evaluate((lastId, lastCheckedTime) => {
+          const tweets: ScrapedMention[] = [];
+          const tweetsToInspect: string[] = [];
+          const articles = Array.from(document.querySelectorAll('article[data-testid="tweet"]'));
+          for (const article of articles) {
+            try {
+              // Extract tweet ID
+              const tweetLink = article.querySelector('a[href*="/status/"]') as HTMLAnchorElement;
+              if (!tweetLink) continue;
+              const tweetId = tweetLink.href.split('/status/')[1]?.split('?')[0];
+              if (!tweetId) continue;
+              // Skip if we've already processed this tweet
+              if (lastId && tweetId === lastId) continue;
+              // Extract tweet content
+              const contentElement = article.querySelector('[data-testid="tweetText"]');
+              const content = contentElement?.textContent || '';
+              // Filter for @arkivenow
+              if (!content.includes('@arkivenow')) continue;
+              // Extract timestamp
+              const timeElement = article.querySelector('time');
+              const timestamp = timeElement?.getAttribute('datetime') || new Date().toISOString();
+              // Stop if this tweet is older than lastCheckedTime
+              if (lastCheckedTime && timestamp < lastCheckedTime) break;
+              // Extract user information
+              const userLink = article.querySelector('a[href^="/"][role="link"]') as HTMLAnchorElement;
+              let username: string = '';
+              if (userLink && typeof userLink.href === 'string') {
+                const match = userLink.href.match(/(?:https?:\/\/)?(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)(?:[/?#]|$)/i);
+                username = match && match[1] ? match[1] : '';
+              }
+              const nameElement = article.querySelector('[data-testid="User-Name"] span');
+              const name = nameElement?.textContent || username;
+              // Extract profile picture
+              const profilePicElement = article.querySelector('img[src*="profile_images"]') as HTMLImageElement;
+              const profilePicture = profilePicElement?.src || '';
+              // Check verification status
+              const verifiedBadge = article.querySelector('[data-testid="icon-verified"]');
+              const verified = !!verifiedBadge;
+              // Extract media
+              const media: Array<{type: string, url: string | undefined, preview_image_url: string | undefined}> = [];
+              const mediaElements = article.querySelectorAll('img[src*="media"]');
+              mediaElements.forEach((img: Element) => {
+                const imgElement = img as HTMLImageElement;
+                media.push({
+                  type: 'photo',
+                  url: imgElement.src,
+                  preview_image_url: imgElement.src
+                });
+              });
+              // Extract metrics (these are usually not visible in mentions, so we'll use defaults)
+              const metrics = {
+                replies: 0,
+                retweets: 0,
+                likes: 0,
+                quotes: 0,
+                bookmarks: 0,
+                impressions: 0
+              };
+              // Check if this is a reply and get parent tweet info
+              const replyIndicator = article.querySelector('[data-testid="reply"]');
+              let parentTweetId: string | undefined;
+              let inReplyToUserId: string | undefined;
+              if (replyIndicator) {
+                // Look for "Replying to @username" text in the current view
+                const replyText = article.textContent || '';
+                const replyMatch = replyText.match(/Replying to @(\w+)/);
+                if (replyMatch) {
+                  inReplyToUserId = replyMatch[1];
+                }
+                // Try to find the parent tweet link in the current view
+                const parentLink = article.querySelector('a[href*="/status/"]') as HTMLAnchorElement;
+                console.log('parentLink:', parentLink);
+                if (parentLink && parentLink.href.includes('/status/')) {
+                  const urlParts = parentLink.href.split('/status/');
+                  console.log('urlParts:', urlParts);
+                  if (urlParts.length > 1) {
+                    parentTweetId = urlParts[1]?.split('?')[0];
+                  }
+                }
+                // Always add to tweetsToInspect for replies
+                if (tweetId) {
+                  tweetsToInspect.push(tweetId);
+                }
+              }
+              tweets.push({
+                id: tweetId,
+                text: content,
+                author_id: username, // Using username as ID since we can't get the actual user ID
+                created_at: timestamp,
+                in_reply_to_user_id: inReplyToUserId,
+                ...(parentTweetId ? {
+                  referenced_tweets: [{
+                    type: 'replied_to' as const,
+                    id: parentTweetId
+                  }]
+                } : {}),
+                author: {
+                  id: username,
+                  username,
+                  name,
+                  profile_image_url: profilePicture,
+                  verified,
+                  verified_type: verified ? 'blue' : 'none'
+                },
+                public_metrics: {
+                  retweet_count: metrics.retweets,
+                  reply_count: metrics.replies,
+                  like_count: metrics.likes,
+                  quote_count: metrics.quotes
+                }
+              });
+              console.log('tweets:', tweets);
+            } catch (error) {
+              console.error('Error parsing tweet:', error);
+            }
+          }
+          // No reverse: keep as top-to-bottom (newest to oldest)
+          return { tweets, tweetsToInspect };
+        }, this.lastMentionId, lastCheckedTime);
+        const { tweets: tweetsReload, tweetsToInspect: tweetsToInspectReload } = mentionsReload;
+        if (tweetsToInspectReload.length > 0) {
+          logger.info(`Need to inspect ${tweetsToInspectReload.length} tweets for parent information...`);
+          for (const tweetId of tweetsToInspectReload) {
+            try {
+              const tweetDetails = await this.getTweetDetails(tweetId);
+              // Update the tweet with parent information
+              const tweetIndex = tweetsReload.findIndex(t => t.id === tweetId);
+              if (tweetIndex !== -1 && tweetDetails && tweetsReload[tweetIndex]) {
+                tweetsReload[tweetIndex].in_reply_to_user_id = tweetDetails.inReplyToUserId;
+                if (tweetDetails.parentTweetId) {
+                  tweetsReload[tweetIndex].referenced_tweets = [{
+                    type: 'replied_to' as const,
+                    id: tweetDetails.parentTweetId
+                  }];
+                }
+              }
+            } catch (error) {
+              logger.warn(`Failed to get details for tweet ${tweetId}:`, error);
+            }
+          }
+        }
+        tweetsReload.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+        logger.info('Scraped mentions after hard reload', { count: tweetsReload.length });
+        return tweetsReload;
+      }
       return tweets;
     } catch (error) {
       logger.error('Failed to scrape mentions', { error });
