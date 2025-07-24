@@ -620,8 +620,10 @@ class TwitterScraperService {
               }
               // Try to find the parent tweet link in the current view
               const parentLink = article.querySelector('a[href*="/status/"]') as HTMLAnchorElement;
+              console.log('parentLink:', parentLink);
               if (parentLink && parentLink.href.includes('/status/')) {
                 const urlParts = parentLink.href.split('/status/');
+                console.log('urlParts:', urlParts);
                 if (urlParts.length > 1) {
                   parentTweetId = urlParts[1]?.split('?')[0];
                 }
@@ -658,6 +660,7 @@ class TwitterScraperService {
                 quote_count: metrics.quotes
               }
             });
+            console.log('tweets:', tweets);
           } catch (error) {
             console.error('Error parsing tweet:', error);
           }
@@ -708,6 +711,16 @@ class TwitterScraperService {
       logger.info(`Navigating to tweet ${tweetId} to get parent information...`);
       await this.page.goto(`https://x.com/i/status/${tweetId}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Scroll up to load parent tweet
+      logger.info('Scrolling up to load parent tweet in thread context...');
+      await this.page.evaluate(() => {
+        const w = window as any;
+        const d = document as any;
+        const height = (w.innerHeight || d.documentElement?.clientHeight || d.body?.clientHeight || 800);
+        window.scrollBy(0, -height); // Scroll up one viewport
+      });
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for DOM to update
 
       // Extract parent tweet info
       const tweetInfo = await this.page.evaluate((replyId) => {
