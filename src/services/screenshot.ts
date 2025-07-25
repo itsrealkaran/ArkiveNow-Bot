@@ -30,7 +30,8 @@ class ScreenshotService {
           '--no-first-run',
           '--no-zygote',
           '--disable-gpu'
-        ]
+        ],
+        executablePath: '/snap/bin/chromium' 
       });
       const page = await browser.newPage();
       
