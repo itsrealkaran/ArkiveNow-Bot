@@ -227,7 +227,7 @@ class ArweaveService {
     requester: string
   ): string {
     const arweaveUrl = this.generateArweaveUrl(arweaveId);
-    const arkiveNowUrl = `https://arkivenow.com/ark/${arweaveId}`;
+    const arkiveNowUrl = `https://arkivenow.com/arkive/${arweaveId}`;
 
     // Dynamic intros with username personalization
     const intros = [
@@ -243,7 +243,7 @@ class ArweaveService {
 
     // Dynamic outros
     const outros = [
-      `Stay frosty @${requester}. #ArkiveNow #Arweave`,
+      `Stay frosty @${requester}. #ArkiveNow`,
       `Cool moves @${requester}. This tweet is now immortal. #ArkiveNow`,
       `The penguin never forgets @${requester}. #ArkiveNow`,
       `Glide on @${requester}, this tweet is safe. #ArkiveNow`,
