@@ -9,7 +9,11 @@ async function migrate() {
     await databaseService.connect();
     logger.info('✅ Connected to database');
     
-    // Initialize tables
+    // Run the migration method that removes UNIQUE constraints
+    await databaseService.migrate();
+    logger.info('✅ Migration completed successfully');
+    
+    // Initialize tables (this will create new tables with correct schema)
     await databaseService.initializeTables();
     logger.info('✅ Tables created successfully');
     

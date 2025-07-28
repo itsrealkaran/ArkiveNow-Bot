@@ -227,6 +227,7 @@ class ArweaveService {
     requester: string
   ): string {
     const arweaveUrl = this.generateArweaveUrl(arweaveId);
+    const arkiveNowUrl = `https://arkivenow.com/ark/${arweaveId}`;
 
     // Dynamic intros with username personalization
     const intros = [
@@ -254,7 +255,7 @@ class ArweaveService {
     const intro = intros[Math.floor(Math.random() * intros.length)];
     const outro = outros[Math.floor(Math.random() * outros.length)];
 
-    return `${intro}\n\n🔗 [View on Arweave](${arweaveUrl})\n\n${outro}`;
+    return `${intro}\n\n🔗 [View on ArkiveNow](${arkiveNowUrl})\n\n${outro}`;
   }
 
   /**

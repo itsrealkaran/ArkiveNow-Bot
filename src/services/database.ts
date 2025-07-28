@@ -91,7 +91,7 @@ class DatabaseService {
       await client.query(`
         CREATE TABLE IF NOT EXISTS tweets (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          tweet_id VARCHAR(255) UNIQUE NOT NULL,
+          tweet_id VARCHAR(255) NOT NULL,
           author_id VARCHAR(255) NOT NULL,
           username VARCHAR,
           text TEXT NOT NULL,
@@ -378,16 +378,7 @@ class DatabaseService {
         `INSERT INTO tweets (
           tweet_id, author_id, username, text, created_at, public_metrics, 
           author_data, media_data, includes_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (tweet_id) DO UPDATE SET
-          author_id = EXCLUDED.author_id,
-          username = EXCLUDED.username,
-          text = EXCLUDED.text,
-          public_metrics = EXCLUDED.public_metrics,
-          author_data = EXCLUDED.author_data,
-          media_data = EXCLUDED.media_data,
-          includes_data = EXCLUDED.includes_data,
-          updated_at = NOW()`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           tweetData.tweet_id,
           tweetData.author_id,
@@ -400,7 +391,7 @@ class DatabaseService {
           JSON.stringify(tweetData.includes_data)
         ]
       );
-      logger.info('Stored tweet data', { tweetId: tweetData.tweet_id });
+      logger.info('Stored tweet data', { tweetId: tweetData.tweet_id, authorId: tweetData.author_id });
     } finally {
       client.release();
     }
@@ -410,7 +401,7 @@ class DatabaseService {
     const client = await this.pool.connect();
     try {
       const result = await client.query(
-        'SELECT * FROM tweets WHERE tweet_id = $1',
+        'SELECT * FROM tweets WHERE tweet_id = $1 ORDER BY created_at_db DESC LIMIT 1',
         [tweetId]
       );
       const row = result.rows[0] || null;
@@ -429,6 +420,38 @@ class DatabaseService {
         poll: includes.poll || null,
         article: includes.article || null
       };
+    } finally {
+      client.release();
+    }
+  }
+
+  async getAllTweetsByTweetId(tweetId: string): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT * FROM tweets WHERE tweet_id = $1 ORDER BY created_at_db DESC',
+        [tweetId]
+      );
+      return result.rows.map(row => {
+        const includes = row.includes_data || {};
+        return {
+          id: row.tweet_id,
+          content: row.text,
+          created_at: row.created_at,
+          metrics: row.public_metrics,
+          author: row.author_data,
+          media: row.media_data,
+          quoted_tweet_id: includes.quoted_tweet_id || null,
+          quoted_tweet: includes.quoted_tweet || null,
+          poll: includes.poll || null,
+          article: includes.article || null,
+          author_id: row.author_id,
+          username: row.username,
+          processing_status: row.processing_status,
+          screenshot_arweave_id: row.screenshot_arweave_id,
+          created_at_db: row.created_at_db
+        };
+      });
     } finally {
       client.release();
     }
@@ -770,9 +793,32 @@ class DatabaseService {
           END IF;
         END$$;
       `);
-      // Ensure unique index on tweets(tweet_id)
+      // Remove unique index on tweets(tweet_id) if it exists
       await client.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_tweets_tweet_id ON tweets(tweet_id);
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'tweets' AND indexname = 'idx_tweets_tweet_id') THEN
+            DROP INDEX idx_tweets_tweet_id;
+          END IF;
+        END$$;
+      `);
+      // Remove UNIQUE constraint from tweets(tweet_id) if it exists
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_name = 'tweets'
+              AND constraint_type = 'UNIQUE'
+              AND constraint_name = 'tweets_tweet_id_key'
+          ) THEN
+            ALTER TABLE tweets DROP CONSTRAINT tweets_tweet_id_key;
+          END IF;
+        END$$;
+      `);
+      // Create non-unique index on tweets(tweet_id) for performance
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_tweets_tweet_id_nonunique ON tweets(tweet_id);
       `);
       logger.info('✅ Database migration completed successfully');
     } finally {

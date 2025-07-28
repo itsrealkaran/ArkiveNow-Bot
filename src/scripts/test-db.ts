@@ -5,11 +5,11 @@ async function testDatabase() {
   try {
     logger.info('🧪 Testing database functionality...');
 
-    // Test tweet storage
-    const testTweet = {
+    // Test tweet storage with multiple users requesting same tweet
+    const testTweet1 = {
       tweet_id: '1234567890123456789',
       author_id: '9876543210987654321',
-      username: 'testuser',
+      username: 'user1',
       text: 'This is a test tweet with quoted content!',
       created_at: new Date().toISOString(),
       public_metrics: {
@@ -20,9 +20,9 @@ async function testDatabase() {
       },
       author_data: {
         id: '9876543210987654321',
-        username: 'testuser',
-        name: 'Test User',
-        profile_image_url: 'https://example.com/avatar.jpg',
+        username: 'user1',
+        name: 'Test User 1',
+        profile_image_url: 'https://example.com/avatar1.jpg',
         verified: false
       },
       media_data: [
@@ -34,75 +34,100 @@ async function testDatabase() {
           height: 600
         }
       ],
-      referenced_tweets: [
-        {
-          type: 'quoted',
-          id: '1111111111111111111'
-        }
-      ],
       includes_data: {
-        users: [
-          {
-            id: '1111111111111111111',
-            username: 'quoteduser',
-            name: 'Quoted User',
-            profile_image_url: 'https://example.com/quoted-avatar.jpg'
-          }
-        ],
-        tweets: [
-          {
-            id: '1111111111111111111',
-            text: 'This is the quoted tweet content',
-            author_id: '1111111111111111111',
-            created_at: new Date().toISOString()
-          }
-        ],
-        media: []
+        quoted_tweet_id: '1111111111111111111',
+        quoted_tweet: {
+          id: '1111111111111111111',
+          text: 'This is the quoted tweet content',
+          author_id: '1111111111111111111'
+        }
       }
     };
 
-    // Store test tweet
-    await databaseService.storeTweet(testTweet);
-    logger.info('✅ Test tweet stored successfully');
+    const testTweet2 = {
+      tweet_id: '1234567890123456789', // Same tweet ID
+      author_id: '5555555555555555555', // Different user
+      username: 'user2',
+      text: 'This is a test tweet with quoted content!',
+      created_at: new Date().toISOString(),
+      public_metrics: {
+        retweet_count: 10,
+        reply_count: 5,
+        like_count: 100,
+        quote_count: 2
+      },
+      author_data: {
+        id: '9876543210987654321',
+        username: 'user1',
+        name: 'Test User 1',
+        profile_image_url: 'https://example.com/avatar1.jpg',
+        verified: false
+      },
+      media_data: [
+        {
+          media_key: 'media123',
+          type: 'photo',
+          url: 'https://example.com/image.jpg',
+          width: 800,
+          height: 600
+        }
+      ],
+      includes_data: {
+        quoted_tweet_id: '1111111111111111111',
+        quoted_tweet: {
+          id: '1111111111111111111',
+          text: 'This is the quoted tweet content',
+          author_id: '1111111111111111111'
+        }
+      }
+    };
 
-    // Update processing status
-    await databaseService.updateTweetProcessingStatus(testTweet.tweet_id, 'processing');
+    // Store first tweet request
+    await databaseService.storeTweet(testTweet1);
+    logger.info('✅ First tweet request stored successfully');
+
+    // Store second tweet request (same tweet, different user)
+    await databaseService.storeTweet(testTweet2);
+    logger.info('✅ Second tweet request stored successfully');
+
+    // Test getting all records for the same tweet_id
+    const allTweets = await databaseService.getAllTweetsByTweetId('1234567890123456789');
+    logger.info('✅ Retrieved all tweets for same tweet_id', { count: allTweets.length });
+
+    // Test getting the most recent tweet
+    const latestTweet = await databaseService.getTweetByTweetId('1234567890123456789');
+    logger.info('✅ Retrieved latest tweet successfully');
+
+    // Update processing status for all records
+    await databaseService.updateTweetProcessingStatus('1234567890123456789', 'processing');
     logger.info('✅ Tweet status updated to processing');
 
-    // Get tweet by ID
-    const retrievedTweet = await databaseService.getTweetByTweetId(testTweet.tweet_id);
-    logger.info('✅ Retrieved tweet:', { 
-      tweetId: retrievedTweet.tweet_id,
-      status: retrievedTweet.processing_status,
-      hasAuthorData: !!retrievedTweet.author_data,
-      hasMediaData: !!retrievedTweet.media_data,
-      username: retrievedTweet.username
+    // Test getting updated records
+    const updatedTweets = await databaseService.getAllTweetsByTweetId('1234567890123456789');
+    logger.info('✅ Retrieved updated tweets', { count: updatedTweets.length });
+
+    // Log the results
+    logger.info('📊 Test Results:', {
+      totalRecords: allTweets.length,
+      firstUser: allTweets[0]?.author_id,
+      secondUser: allTweets[1]?.author_id,
+      latestTweetId: latestTweet?.id
     });
 
-    // Update to completed
-    await databaseService.updateTweetProcessingStatus(testTweet.tweet_id, 'completed', 'arweave-test-id-123');
-    logger.info('✅ Tweet status updated to completed');
-
-    // Get tweets by status
-    const completedTweets = await databaseService.getTweetsByStatus('completed', 10);
-    logger.info('✅ Retrieved completed tweets:', { count: completedTweets.length });
-
-    // Get tweet stats
-    const stats = await databaseService.getTweetStats();
-    logger.info('✅ Tweet stats:', stats);
-
-    // Get tweets by author
-    const authorTweets = await databaseService.getTweetsByAuthorId(testTweet.author_id, 10);
-    logger.info('✅ Retrieved author tweets:', { count: authorTweets.length });
-
-    logger.info('✅ All database tests passed!');
-
+    logger.info('✅ Database test completed successfully');
   } catch (error) {
-    logger.error('❌ Database test failed:', error);
-  } finally {
-    await databaseService.close();
+    logger.error('❌ Database test failed', { error });
+    throw error;
   }
 }
 
 // Run the test
-testDatabase().catch(console.error); 
+testDatabase()
+  .then(() => {
+    logger.info('🎉 All tests passed!');
+    process.exit(0);
+  })
+  .catch((error) => {
+    logger.error('💥 Test failed', { error });
+    process.exit(1);
+  }); 
